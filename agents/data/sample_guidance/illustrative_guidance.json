@@ -1,0 +1,29 @@
+[
+  {
+    "chunk_id": "DEMO-STRUCT-001",
+    "text": "Repeated deposits near an illustrative review threshold can justify examining the economic rationale. Such activity alone does not establish wrongdoing.",
+    "source": "AMLens illustrative training material (not regulatory guidance)",
+    "section": "Structuring indicators",
+    "page": 1,
+    "typology": "structuring",
+    "relevance_score": 0.92
+  },
+  {
+    "chunk_id": "DEMO-RAPID-001",
+    "text": "Incoming funds followed shortly by outgoing transfers may merit review of transaction purpose and supporting documents.",
+    "source": "AMLens illustrative training material (not regulatory guidance)",
+    "section": "Rapid movement indicators",
+    "page": 2,
+    "typology": "rapid_movement",
+    "relevance_score": 0.9
+  },
+  {
+    "chunk_id": "DEMO-FAN-001",
+    "text": "Multiple counterparties on incoming and outgoing payments can prompt questions about the underlying business relationships.",
+    "source": "AMLens illustrative training material (not regulatory guidance)",
+    "section": "Counterparty patterns",
+    "page": 3,
+    "typology": "fan_in_out",
+    "relevance_score": 0.88
+  }
+]

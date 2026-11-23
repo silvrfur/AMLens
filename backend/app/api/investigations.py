@@ -28,6 +28,9 @@ def start_investigation(alert_id: str, db: Session = Depends(get_db)):
         raise HTTPException(404, 'Alert not found')
     inv = Investigation(id=str(uuid4()), alert_id=alert_id, status='PENDING_AGENT')
     db.add(inv)
+    # Insert the parent row first: PostgreSQL enforces the audit_history ->
+    # investigations foreign key (SQLite silently did not).
+    db.flush()
     db.add(AuditEvent(id=str(uuid4()), investigation_id=inv.id, action='CREATED',
                       details={'alert_id': alert_id}))
     db.commit()

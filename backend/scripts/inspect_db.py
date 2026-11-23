@@ -1,35 +1,34 @@
-"""Read-only viewer for aml.db.
+"""Read-only viewer for the main AML PostgreSQL database.
 
-Usage (from the backend/ folder):
+Usage (from the backend/ folder, venv active, DATABASE_URL set):
     python scripts/inspect_db.py                      # tables + row counts
     python scripts/inspect_db.py alerts               # first 20 rows of a table
     python scripts/inspect_db.py alerts 50            # first 50 rows
     python scripts/inspect_db.py "SELECT rule_id, COUNT(*) FROM alerts GROUP BY rule_id"
+
+Every query runs in a READ ONLY transaction, so it cannot change data.
 """
 
-import sqlite3
 import sys
 from pathlib import Path
 
-DB = Path(__file__).resolve().parents[1] / "aml.db"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from sqlalchemy import text  # noqa: E402
+
+from app.database.connection import engine  # noqa: E402
+
 MAX_WIDTH = 60
 
-conn = sqlite3.connect(f"file:{DB.as_posix()}?mode=ro", uri=True)
-tables = [
-    name for (name,) in conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-    )
-]
 
-
-def show(cursor):
-    headers = [d[0] for d in cursor.description]
+def show(result):
+    headers = list(result.keys())
     rows = [
         [
             (s if len(s) <= MAX_WIDTH else s[:MAX_WIDTH - 3] + "...")
             for s in map(str, row)
         ]
-        for row in cursor.fetchall()
+        for row in result.fetchall()
     ]
     widths = [
         max(len(h), *(len(r[i]) for r in rows)) if rows else len(h)
@@ -44,13 +43,26 @@ def show(cursor):
 
 args = sys.argv[1:]
 
-if not args:
-    for t in tables:
-        count = conn.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]
-        cols = [c[1] for c in conn.execute(f'PRAGMA table_info("{t}")')]
-        print(f"{t:24} {count:>7} rows   columns: {', '.join(cols)}")
-elif args[0] in tables:
-    limit = int(args[1]) if len(args) > 1 else 20
-    show(conn.execute(f'SELECT * FROM "{args[0]}" LIMIT ?', (limit,)))
-else:
-    show(conn.execute(" ".join(args)))
+with engine.connect() as conn, conn.begin():
+    conn.execute(text("SET TRANSACTION READ ONLY"))
+    tables = [
+        name for (name,) in conn.execute(text(
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema = current_schema() AND table_type = 'BASE TABLE' "
+            "ORDER BY table_name"
+        ))
+    ]
+
+    if not args:
+        for t in tables:
+            count = conn.execute(text(f'SELECT COUNT(*) FROM "{t}"')).scalar()
+            cols = [c for (c,) in conn.execute(text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema = current_schema() AND table_name = :t "
+                "ORDER BY ordinal_position"), {"t": t})]
+            print(f"{t:24} {count:>7} rows   columns: {', '.join(cols)}")
+    elif args[0] in tables:
+        limit = int(args[1]) if len(args) > 1 else 20
+        show(conn.execute(text(f'SELECT * FROM "{args[0]}" LIMIT :n'), {"n": limit}))
+    else:
+        show(conn.execute(text(" ".join(args))))

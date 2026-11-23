@@ -1,8 +1,12 @@
 
-"""Read-only Member 1 SQLite -> Agent AlertBundle adapter.
+"""Read-only Member 1 PostgreSQL -> Agent AlertBundle adapter.
+
+Implements the agents package's BackendClient protocol
+(agents/services/backend_client.py): get_alert_context(alert_id) -> AlertBundle.
 
 Responsibilities:
-- Read alerts and transactions from Member 1 SQLite.
+- Read alerts and transactions from Member 1 PostgreSQL, inside
+  READ ONLY transactions with a statement timeout.
 - Convert backend records into the agent team's AlertBundle schema.
 - Never write to source tables.
 - Never expose ground-truth laundering labels or raw account references.
@@ -20,12 +24,16 @@ a local MVP compatibility policy, not a complete investigation policy.
 
 import json
 import logging
-import sqlite3
+import os
 
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
-from pathlib import Path
 from zoneinfo import ZoneInfo
+
+from sqlalchemy import create_engine, text
+
+from app.database.connection import normalize_database_url
 
 from agents.schemas.investigation import AlertBundle
 from agents.services.audit_service import consume
@@ -117,8 +125,11 @@ def _time(value, source_timezone):
     if value is None:
         raise ValueError("Transaction timestamp is missing")
 
-    dt = datetime.fromisoformat(
-        str(value).replace("Z", "+00:00")
+    # PostgreSQL returns datetime objects; strings are still accepted.
+    dt = (
+        value
+        if isinstance(value, datetime)
+        else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     )
 
     if dt.tzinfo is None:
@@ -135,15 +146,16 @@ class TeamBackend:
     """
     Read-only Member 1 backend adapter.
 
-    Source database: aml.db
-    Agent persistence database: separate agent_runtime.db
+    Source database: Member 1 PostgreSQL (DATABASE_URL, or a dedicated
+    read-only login via AML_SOURCE_DATABASE_URL).
+    Agent persistence database: separate agent_runtime.db (SQLite).
 
     Only returns validated AlertBundle objects.
     """
 
     def __init__(
         self,
-        database_path: str,
+        database_url: str | None = None,
         *,
         source_timezone: str,
         window_hours: int = 48,
@@ -151,15 +163,17 @@ class TeamBackend:
         timeout_seconds: float = 3,
     ):
 
-        path = Path(database_path).resolve()
+        url = (
+            database_url
+            or os.getenv("AML_SOURCE_DATABASE_URL")
+            or os.getenv("DATABASE_URL")
+        )
 
-        if not path.is_file():
-            raise FileNotFoundError(
-                f"Member 1 database not found: {path}"
+        if not url:
+            raise ValueError(
+                "Member 1 database URL is required "
+                "(argument, AML_SOURCE_DATABASE_URL or DATABASE_URL)"
             )
-
-        # Open SQLite in read-only mode.
-        self.db_uri = path.as_uri() + "?mode=ro"
 
         # Explicit timezone avoids silently guessing IBM timestamps.
         self.source_timezone = (
@@ -181,6 +195,48 @@ class TeamBackend:
         self.limit = max_transactions
         self.timeout = timeout_seconds
 
+        # Small dedicated pool; every use is a READ ONLY transaction.
+        self.engine = create_engine(
+            normalize_database_url(url),
+            pool_pre_ping=True,
+            pool_size=2,
+            max_overflow=2,
+            pool_recycle=1800,
+            connect_args={
+                "connect_timeout": max(1, int(timeout_seconds)),
+                "application_name": "amlens-agent-adapter",
+                # timestamptz values come back as UTC, exactly as before.
+                "options": "-c timezone=UTC",
+            },
+        )
+
+    def close(self):
+        """Release pooled database connections."""
+        self.engine.dispose()
+
+    @contextmanager
+    def _read_only(self):
+        """
+        Yield a connection inside a READ ONLY transaction.
+
+        PostgreSQL rejects any INSERT/UPDATE/DELETE/DDL in it, and every
+        statement is bounded by the configured timeout (the equivalent of
+        the former SQLite query_only + busy_timeout pragmas).
+        """
+        timeout_ms = str(int(self.timeout * 1000))
+
+        with self.engine.connect() as conn:
+            with conn.begin():
+                conn.execute(text("SET TRANSACTION READ ONLY"))
+                conn.execute(
+                    text(
+                        "SELECT set_config('statement_timeout', :ms, true), "
+                        "set_config('lock_timeout', :ms, true)"
+                    ),
+                    {"ms": timeout_ms},
+                )
+                yield conn
+
     # ------------------------------------------------------
     # 6. Main interface required by LangGraph agents
     # ------------------------------------------------------
@@ -197,42 +253,32 @@ class TeamBackend:
             raise ValueError("alert_id is required")
 
         # Required agent audit-budget call.
-        # Must occur BEFORE the SQLite read attempt.
+        # Must occur BEFORE the database read attempt.
         consume("backend.read")
 
-        with sqlite3.connect(
-            self.db_uri,
-            uri=True,
-            timeout=self.timeout,
-        ) as conn:
-
-            conn.row_factory = sqlite3.Row
-
-            conn.execute("PRAGMA query_only=ON")
-
-            conn.execute(
-                f"PRAGMA busy_timeout={int(self.timeout * 1000)}"
-            )
+        with self._read_only() as conn:
 
             # --------------------------------------------------
             # 7. Retrieve the requested alert
             # --------------------------------------------------
 
             alert = conn.execute(
-                """
-                SELECT
-                    id,
-                    transaction_id,
-                    rule_id,
-                    description,
-                    evidence,
-                    status,
-                    created_at
-                FROM alerts
-                WHERE id = ?
-                """,
-                (alert_id,),
-            ).fetchone()
+                text(
+                    """
+                    SELECT
+                        id,
+                        transaction_id,
+                        rule_id,
+                        description,
+                        evidence,
+                        status,
+                        created_at
+                    FROM alerts
+                    WHERE id = :alert_id
+                    """
+                ),
+                {"alert_id": alert_id},
+            ).mappings().fetchone()
 
             if alert is None:
                 raise KeyError(
@@ -270,13 +316,15 @@ class TeamBackend:
             # --------------------------------------------------
 
             trigger = conn.execute(
-                """
-                SELECT *
-                FROM transactions
-                WHERE id = ?
-                """,
-                (alert["transaction_id"],),
-            ).fetchone()
+                text(
+                    """
+                    SELECT *
+                    FROM transactions
+                    WHERE id = :transaction_id
+                    """
+                ),
+                {"transaction_id": alert["transaction_id"]},
+            ).mappings().fetchone()
 
             if trigger is None:
                 raise RuntimeError(
@@ -317,9 +365,14 @@ class TeamBackend:
             # 11. Define the bounded history window
             # --------------------------------------------------
 
-            trigger_dt = datetime.fromisoformat(
-                str(trigger["timestamp"]).replace("Z", "+00:00")
-            )
+            # transactions.timestamp is timezone-naive (source zone),
+            # so the window bounds are naive datetimes too.
+            trigger_dt = trigger["timestamp"]
+
+            if not isinstance(trigger_dt, datetime):
+                trigger_dt = datetime.fromisoformat(
+                    str(trigger_dt).replace("Z", "+00:00")
+                )
 
             if trigger_dt.tzinfo is not None:
                 trigger_dt = (
@@ -328,51 +381,46 @@ class TeamBackend:
                     .replace(tzinfo=None)
                 )
 
-            start = (
-                trigger_dt - self.window
-            ).isoformat()
+            start = trigger_dt - self.window
 
-            end = (
-                trigger_dt + self.window
-            ).isoformat()
+            end = trigger_dt + self.window
 
             # --------------------------------------------------
             # 12. Retrieve bounded account history
+            #     (closest in time to the trigger first)
             # --------------------------------------------------
 
             rows = conn.execute(
-                """
-                SELECT *
-                FROM transactions
-                WHERE dataset_id = ?
-                  AND (
-                    sender_token = ?
-                    OR receiver_token = ?
-                  )
-                  AND timestamp >= ?
-                  AND timestamp <= ?
-                  AND id != ?
-                ORDER BY
-                    ABS(
-                        strftime('%s', timestamp)
-                        - strftime('%s', ?)
-                    ),
-                    id
-                LIMIT ?
-                """,
-                (
-                    dataset_id,
-                    anchor,
-                    anchor,
-                    start,
-                    end,
-                    alert["transaction_id"],
-                    trigger["timestamp"],
-                    self.limit - 1,
+                text(
+                    """
+                    SELECT t.*
+                    FROM transactions AS t
+                    WHERE t.dataset_id = :dataset_id
+                      AND (
+                        t.sender_token = :anchor
+                        OR t.receiver_token = :anchor
+                      )
+                      AND t."timestamp" >= :start
+                      AND t."timestamp" <= :end
+                      AND t.id <> :trigger_id
+                    ORDER BY
+                        ABS(EXTRACT(EPOCH FROM (t."timestamp" - :trigger_ts))),
+                        t.id
+                    LIMIT :row_limit
+                    """
                 ),
-            ).fetchall()
+                {
+                    "dataset_id": dataset_id,
+                    "anchor": anchor,
+                    "start": start,
+                    "end": end,
+                    "trigger_id": alert["transaction_id"],
+                    "trigger_ts": trigger_dt,
+                    "row_limit": self.limit - 1,
+                },
+            ).mappings().fetchall()
 
-        # SQLite connection is closed from here onward.
+        # Database connection is returned to the pool from here onward.
 
         # Always include the triggering transaction.
         selected = [trigger, *rows]
@@ -408,7 +456,7 @@ class TeamBackend:
         required_ids.add(alert["transaction_id"])
 
         # ------------------------------------------------------
-        # 14. Convert SQLite rows into agent transactions
+        # 14. Convert database rows into agent transactions
         # ------------------------------------------------------
 
         mapped = []
@@ -448,7 +496,7 @@ class TeamBackend:
 
                 # MVP compatibility policy:
                 # Non-required self-transfers are excluded.
-                # They remain unchanged in SQLite.
+                # They remain unchanged in the source database.
                 excluded_self_transfers.append(row["id"])
 
                 continue

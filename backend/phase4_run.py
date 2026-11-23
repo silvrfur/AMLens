@@ -1,15 +1,21 @@
 
 """
-Phase 4: Run real Member 1 SQLite evidence
+Phase 4: Run real Member 1 PostgreSQL evidence
 through the five LangGraph investigation agents.
 
 Uses mock LLM and mock RAG.
-Does not modify Member 1's source database.
+Does not modify Member 1's source database (reads are READ ONLY).
+Agent results go to the separate agent_runtime.db SQLite file.
+
+Usage (from backend/, DATABASE_URL set):
+    python phase4_run.py [ALERT_ID]
 """
 
 from pathlib import Path
 from uuid import uuid4
 import json
+import os
+import sys
 
 from app.integrations.team_backend import TeamBackend
 
@@ -24,19 +30,18 @@ from agents.schemas.messages import InvestigationMessage
 
 BASE_DIR = Path(__file__).resolve().parent
 
-SOURCE_DB = BASE_DIR / "aml.db"
 AGENT_DB = BASE_DIR / "agent_runtime.db"
 
-ALERT_ID = "AL_3d8358dcb78db6b328ce_3"
+ALERT_ID = sys.argv[1] if len(sys.argv) > 1 else "AL_3d8358dcb78db6b328ce_3"
 
 
 # -------------------------------------------------
-# 2. Connect to Member 1's SQLite database
+# 2. Connect to Member 1's PostgreSQL database
+#    (DATABASE_URL / AML_SOURCE_DATABASE_URL)
 # -------------------------------------------------
 
 backend = TeamBackend(
-    database_path=str(SOURCE_DB),
-    source_timezone="UTC",
+    source_timezone=os.getenv("AML_SOURCE_TIMEZONE", "UTC"),
     window_hours=48,
     max_transactions=200,
     timeout_seconds=3,

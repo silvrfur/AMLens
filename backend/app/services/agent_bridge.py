@@ -1,6 +1,11 @@
 """Local development bridge to the agent team's independent persistence database.
 
-The source Member 1 database is never passed as the agent persistence database.
+Two databases, never the same one:
+- Member 1 source data (transactions, alerts, cases): PostgreSQL, read by
+  TeamBackend through READ ONLY transactions.
+- Agent runtime persistence (reports, agent runs, tool calls): the agents
+  package's own SQLite file (agent_runtime.db), unchanged.
+
 No service bus or live LLM is required for the local smoke test.
 """
 import os
@@ -10,41 +15,51 @@ from agents.config import Settings
 from agents.main import create_services
 from agents.services.sqlite_service import SQLiteService
 from agents.services.persistence import Persistence
+from app.database.connection import normalize_database_url
 from app.integrations.team_backend import TeamBackend
 
+_BACKENDS: dict[tuple[str, str], TeamBackend] = {}
 
-def _source_path() -> Path:
-    explicit = os.getenv('AML_SOURCE_DATABASE_PATH')
-    if explicit:
-        return Path(explicit).expanduser().resolve()
-    source_url = os.getenv('DATABASE_URL', 'sqlite:///./aml.db')
-    if not source_url.startswith('sqlite:///'):
-        raise ValueError('Local agent bridge requires a SQLite source database')
-    return Path(source_url.removeprefix('sqlite:///')).resolve()
+
+def _source_url() -> str:
+    """PostgreSQL URL the agent adapter reads from.
+
+    AML_SOURCE_DATABASE_URL lets you use a SELECT-only login for the agents;
+    otherwise the main DATABASE_URL is used (reads are READ ONLY regardless).
+    """
+    url = os.getenv('AML_SOURCE_DATABASE_URL') or os.getenv('DATABASE_URL')
+    if not url:
+        raise ValueError('Set DATABASE_URL (or AML_SOURCE_DATABASE_URL) for the Member 1 source database')
+    return normalize_database_url(url)
 
 
 def _agent_path() -> Path:
-    return Path(os.getenv('AML_AGENT_DATABASE_PATH', './agent_runtime.db')).expanduser().resolve()
+    path = Path(os.getenv('AML_AGENT_DATABASE_PATH', './agent_runtime.db')).expanduser().resolve()
+    if path.suffix.lower() not in ('.db', '.sqlite', '.sqlite3'):
+        raise ValueError('AML_AGENT_DATABASE_PATH must point to the agents SQLite file (e.g. agent_runtime.db)')
+    return path
+
+
+def _team_backend(zone: str) -> TeamBackend:
+    """One adapter (and connection pool) per process, reused across runs."""
+    key = (_source_url(), zone)
+    if key not in _BACKENDS:
+        _BACKENDS[key] = TeamBackend(database_url=key[0], source_timezone=zone,
+                                     window_hours=48, max_transactions=200, timeout_seconds=3)
+    return _BACKENDS[key]
 
 
 def get_agent_persistence():
     """Retrieve persisted reports without starting an investigation."""
-    path = _agent_path()
-    if path == _source_path():
-        raise ValueError('Agent persistence must not share Member 1 source SQLite file')
-    return Persistence(SQLiteService(path))
+    return Persistence(SQLiteService(_agent_path()))
 
 
 def get_agent_services():
     """Create a short-lived set of local mock agent services for a synchronous run."""
-    source, agent = _source_path(), _agent_path()
-    if source == agent:
-        raise ValueError('Agent persistence must not share Member 1 source SQLite file')
+    agent = _agent_path()
     zone = os.getenv('AML_SOURCE_TIMEZONE')
     if not zone:
         raise ValueError('Set AML_SOURCE_TIMEZONE explicitly for source transaction timestamps')
-    backend = TeamBackend(database_path=str(source), source_timezone=zone,
-                          window_hours=48, max_transactions=200, timeout_seconds=3)
     settings = Settings(
         _env_file=None,
         database_url='sqlite:///' + agent.as_posix(),
@@ -54,4 +69,4 @@ def get_agent_services():
         use_mock_service_bus=True,
         llm_provider='groq',
     )
-    return create_services(settings=settings, backend=backend)
+    return create_services(settings=settings, backend=_team_backend(zone))

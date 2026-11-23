@@ -4,6 +4,10 @@ pandas>=2.0,<3
 sqlalchemy>=2.0,<3
 pydantic>=2.0,<3
 python-multipart>=0.0.9
+# PostgreSQL (main AML data) + schema migrations
+psycopg[binary]>=3.2,<4
+alembic>=1.13,<2
+python-dotenv>=1.0,<2
 pytest>=8,<10
 httpx>=0.27,<1
-# For Azure integration later: pyodbc, azure-identity, azure-storage-blob
+# For Azure integration later: azure-identity (Entra ID DB auth), azure-storage-blob

@@ -1,15 +1,8 @@
 import json
 import time
-from typing import Protocol, TypeVar
-from pydantic import BaseModel
 from groq import Groq, RateLimitError, APIConnectionError, APITimeoutError, APIStatusError
 from .audit_service import consume
-
-T = TypeVar("T", bound=BaseModel)
-class StructuredLLM(Protocol):
-    def generate_structured_response(self, system_prompt: str, user_input: dict, response_schema: type[T]) -> T: ...
-
-class LLMUnavailable(RuntimeError): pass
+from .llm import StructuredLLM, LLMUnavailable  # re-exported for backward compatibility
 
 class GroqLLM:
     def __init__(self, api_key, model, timeout=30, client=None, sleep=time.sleep):
@@ -18,6 +11,8 @@ class GroqLLM:
         # Disable SDK retries so every actual request is counted against the graph budget.
         self.client = client or Groq(api_key=api_key, timeout=timeout, max_retries=0)
         self.model, self.sleep = model, sleep
+
+    def close(self): self.client.close()
 
     def generate_structured_response(self, system_prompt, user_input, response_schema):
         messages = [

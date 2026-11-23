@@ -153,15 +153,16 @@ The report verifier rejects any altered citation metadata or unknown referenced 
 vectors and the illustrative guidance JSON. It is not the production embedding/indexing
 pipeline. Default MockRAGClient uses deterministic fixtures so tests are fully offline.
 
-## Groq and report contract
+## LLM (Azure OpenAI / Groq) and report contract
 
 `StructuredLLM.generate_structured_response(system_prompt, user_input, response_schema)`
-returns a validated Pydantic object. `GroqLLM` owns model-specific JSON mode, timeout and
-transient retries. `MockGroqClient` is deterministic and supports correction fault injection.
+returns a validated Pydantic object (interface in `services/llm.py`). `AzureOpenAILLM`
+(default) and `GroqLLM` own provider-specific JSON mode, timeout and transient retries;
+`main.create_llm(settings)` selects one from `LLM_PROVIDER`. `MockGroqClient` is deterministic and supports correction fault injection.
 If replacing this abstraction, charge **each actual request** to `llm.generate` and keep
 prompt contents/exception text out of logs. Model names are configured, never guessed.
 
-The structured Groq response is `NarrativeDraft(statements, recommended_next_steps)`.
+The structured LLM response is `NarrativeDraft(statements, recommended_next_steps)`.
 The report agent then constructs and validates `InvestigationReport`, with five mandatory
 sections and a human-review disclaimer. This deliberately restricts the model to selection
 and ordering of validated statements, while deterministic code controls numbers and evidence.

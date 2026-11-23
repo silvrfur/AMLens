@@ -1,8 +1,8 @@
 # AMLens / TraceIQ — Member 3
 
 Standalone Python investigation assistant using real LangGraph, SQLite, Pydantic v2,
-Pandas, the official Groq SDK, and Azure Service Bus. Offline defaults use deterministic
-Groq/RAG fixtures and an in-memory queue. No agent can record an investigator decision.
+Pandas, Azure OpenAI (Groq optional), and Azure Service Bus. Offline defaults use deterministic
+LLM/RAG fixtures and an in-memory queue. No agent can record an investigator decision.
 
 ## Quick start
 
@@ -42,7 +42,7 @@ any execution failure ------------------------------------> persist failed -> EN
 
 There is exactly one correction route and no cycles. `retry_count` records that attempt.
 A graph recursion limit is a secondary bound. ToolBudget caps backend reads, RAG searches,
-and individual Groq requests (including provider retries) at eight per execution attempt.
+and individual LLM requests (including provider retries) at eight per execution attempt.
 Database persistence/auditing and broker settlement are internal operations outside that
 external-tool budget. Retried queue deliveries start another bounded execution only if
 no completed/incomplete result exists.
@@ -60,7 +60,7 @@ no completed/incomplete result exists.
 - **Information gap agent:** seven case-information categories. Absent input means
   `not_provided`, not `confirmed_missing`. Explicit backend attestations distinguish
   available/verified, missing and not applicable.
-- **Report agent:** Groq selects/orders approved evidence-grounded narrative sentences and
+- **Report agent:** the LLM (Azure OpenAI) selects/orders approved evidence-grounded narrative sentences and
   follow-up actions. Python assembles the five typed sections and authoritative facts.
   Financial calculations and citation generation are never delegated to the model.
 
@@ -139,12 +139,22 @@ redelivery, which reads the existing result without repeating inference.
 
 ## Configuration
 
-Defaults are offline. To enable real Groq set `USE_MOCK_LLM=false`, `GROQ_API_KEY` and
-`GROQ_MODEL` to an available model supporting JSON object chat completions. The SDK uses
-JSON object mode plus local Pydantic validation, a 30-second timeout and up to three
-attempts for connection/timeouts, rate limits and server failures. Authentication/client
-errors are not retried. SDK internal retries are disabled to preserve the tool budget.
-Groq availability and model IDs are not hard-coded; inspect your account's model catalog.
+Defaults are offline. The live LLM provider is **Azure OpenAI** (`LLM_PROVIDER=azure_openai`).
+To enable it set `USE_MOCK_LLM=false`, `AZURE_OPENAI_ENDPOINT` (e.g.
+`https://<resource>.openai.azure.com/`), `AZURE_OPENAI_DEPLOYMENT` (your chat deployment
+name, not the model name) and optionally `AZURE_OPENAI_API_VERSION` (default `2024-10-21`).
+For the v1 API, use the endpoint ending in `/openai/v1/` (or set `AZURE_OPENAI_API_VERSION=v1`);
+no api-version is then sent.
+Set `AZURE_OPENAI_API_KEY` for key auth, or leave it empty to use Entra ID through
+`DefaultAzureCredential` (`az login` locally, managed identity in Azure; the identity needs
+the *Cognitive Services OpenAI User* role). The adapter uses JSON object mode plus local
+Pydantic validation, a 30-second timeout (`LLM_TIMEOUT_SECONDS`) and up to three attempts
+for connection/timeouts, rate limits and server failures. Authentication, missing-deployment
+and content-filter (4xx) errors are not retried. SDK internal retries are disabled to
+preserve the tool budget. The deployment must support JSON mode (e.g. gpt-4o / gpt-4.1 family).
+
+Groq remains available with `LLM_PROVIDER=groq`, `GROQ_API_KEY` and `GROQ_MODEL`, with the
+same retry and validation contract. Provider SDKs are imported only when selected.
 
 Set `USE_MOCK_RAG=false` with `RAG_SERVICE_URL` or inject Member 2's adapter.
 Set `USE_MOCK_BACKEND=false` for existing SQLite data without synthetic seeding.
@@ -160,7 +170,7 @@ Never commit `.env` files. All real network integrations need explicitly enabled
 ## Tests and production scope
 
 Tests exercise each agent, real LangGraph paths, real SQLite transactions and concurrent
-claims, FAISS demo search, Groq SDK request/retry contracts, HTTP RAG contract, report
+claims, FAISS demo search, Azure OpenAI and Groq SDK request/retry contracts, HTTP RAG contract, report
 attacks, idempotency, broker retries/dead letters/ack failure and FastAPI integration.
 They require no credentials. See `VALIDATION.md` for the actual recorded run.
 
@@ -172,12 +182,13 @@ Synthetic passages are labelled illustrative, not FATF or other regulatory quota
 The USD 10,000 analysis parameter is illustrative, not a legal threshold. Temporal
 proximity is not actual traced flow of funds. Current history analysis is intended for
 small case windows; large histories require bounded/windowed retrieval and optimization.
-Live Groq, Azure, and Member 2 services have SDK/contract tests but were not exercised with
+Live Azure OpenAI, Groq, Azure Service Bus, and Member 2 services have SDK/contract tests but were not exercised with
 real credentials. See `INTEGRATION_GUIDE.md` for exact replacement contracts.
 
 ## SDK references
 
 Implementation checked against official documentation:
+- [Azure OpenAI JSON mode](https://learn.microsoft.com/azure/ai-services/openai/how-to/json-mode)
 - [Groq structured outputs](https://console.groq.com/docs/structured-outputs)
 - [LangGraph workflows](https://github.com/langchain-ai/docs/blob/main/src/oss/langgraph/workflows-agents.mdx)
 - [Azure Service Bus Python SDK](https://learn.microsoft.com/python/api/overview/azure/servicebus-readme)

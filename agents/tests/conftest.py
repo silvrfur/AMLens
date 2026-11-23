@@ -31,7 +31,12 @@ def state(services, message):
 @pytest.fixture(autouse=True)
 def no_external_network(monkeypatch):
     import socket
+    real_connect = socket.socket.connect
     def blocked(*args, **kwargs):
         raise AssertionError('Offline tests must not connect to external services')
+    def connect(sock, address):
+        # Windows asyncio builds its self-pipe with a loopback socketpair; allow only that.
+        if isinstance(address, tuple) and address[0] == '127.0.0.1': return real_connect(sock, address)
+        blocked()
     monkeypatch.setattr(socket, 'create_connection', blocked)
-    monkeypatch.setattr(socket.socket, 'connect', blocked)
+    monkeypatch.setattr(socket.socket, 'connect', connect)

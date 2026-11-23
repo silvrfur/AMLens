@@ -1,4 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.database.connection import get_db
 from app.services.ingestion import ingest_csv, MAX_UPLOAD
@@ -14,3 +15,8 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
     except ValueError as e:
         db.rollback()
         raise HTTPException(400, str(e)) from e
+    except IntegrityError:
+        # Two concurrent uploads of the same file: the primary key rejects the
+        # second one. Nothing from it was committed.
+        db.rollback()
+        raise HTTPException(400, 'Dataset already imported') from None

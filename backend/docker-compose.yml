@@ -1,0 +1,25 @@
+# Local PostgreSQL 16 for teammates without a local install.
+#   docker compose up -d
+#   DATABASE_URL=postgresql+psycopg://amlens:amlens_dev@127.0.0.1:5433/amlens
+# (use 127.0.0.1, not localhost - Windows may try IPv6 first and stall)
+# Host port 5433 avoids clashing with a locally installed Postgres on 5432.
+# Development credentials only - never reuse them anywhere else.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: amlens
+      POSTGRES_PASSWORD: amlens_dev
+      POSTGRES_DB: amlens
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - amlens_pgdata:/var/lib/postgresql/data
+      - ./scripts/docker-init-test-db.sql:/docker-entrypoint-initdb.d/10-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U amlens -d amlens"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  amlens_pgdata:

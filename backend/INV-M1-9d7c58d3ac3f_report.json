@@ -1,0 +1,248 @@
+{
+  "investigation_id": "INV-M1-9d7c58d3ac3f",
+  "alert_summary": {
+    "alert_id": "AL_3d8358dcb78db6b328ce_3",
+    "typology": "rapid_movement",
+    "account_id": "acct_b84673b2a36eb4bd",
+    "summary": "Transaction alert prepared for human investigation."
+  },
+  "transaction_analysis": {
+    "observed_patterns": [
+      {
+        "pattern_id": "USD.activity",
+        "description": "Observed transaction activity in USD.",
+        "transaction_ids": [
+          "TX_3d8358dcb78db6b328ce_2",
+          "TX_3d8358dcb78db6b328ce_3"
+        ],
+        "metric_key": "USD.total"
+      },
+      {
+        "pattern_id": "USD.round",
+        "description": "Amounts are multiples of a thousand currency units.",
+        "transaction_ids": [
+          "TX_3d8358dcb78db6b328ce_2",
+          "TX_3d8358dcb78db6b328ce_3"
+        ],
+        "metric_key": "USD.round_count"
+      },
+      {
+        "pattern_id": "USD.rapid",
+        "description": "Deposits and withdrawals occur close together in time.",
+        "transaction_ids": [
+          "TX_3d8358dcb78db6b328ce_2",
+          "TX_3d8358dcb78db6b328ce_3"
+        ],
+        "metric_key": "USD.rapid_transaction_count"
+      }
+    ],
+    "potential_red_flags": [
+      "Amounts are multiples of a thousand currency units. Requires contextual human review.",
+      "Deposits and withdrawals occur close together in time. Requires contextual human review."
+    ],
+    "supporting_transaction_ids": [
+      "TX_3d8358dcb78db6b328ce_2",
+      "TX_3d8358dcb78db6b328ce_3"
+    ],
+    "computed_statistics": {
+      "transaction_count": 2,
+      "counterparty_count": 2,
+      "USD.total": "2380000.00",
+      "USD.deposits": "1200000.00",
+      "USD.withdrawals": "1180000.00",
+      "USD.net": "20000.00",
+      "USD.deposit_count": 1,
+      "USD.withdrawal_count": 1,
+      "USD.fan_in": 1,
+      "USD.fan_out": 1,
+      "USD.threshold_parameter": "10000",
+      "USD.peak_hour_count": 2,
+      "USD.round_count": 2,
+      "USD.cluster_count": 0,
+      "USD.rapid_transaction_count": 2
+    },
+    "limitations": [
+      "Observed window only; no historical baseline or proof of criminal activity.",
+      "Threshold clustering uses an illustrative USD parameter, not a regulatory threshold.",
+      "Rapid movement is temporal proximity, not traced ownership or flow of funds."
+    ]
+  },
+  "aml_guidance_and_evidence": {
+    "references": [
+      {
+        "chunk_id": "DEMO-RAPID-001",
+        "text": "Incoming funds followed shortly by outgoing transfers may merit review of transaction purpose and supporting documents.",
+        "source": "AMLens illustrative training material (not regulatory guidance)",
+        "section": "Rapid movement indicators",
+        "page": 2,
+        "typology": "rapid_movement",
+        "relevance_score": 0.9
+      }
+    ],
+    "evidence": [
+      {
+        "claim_id": "FACT-1",
+        "claim": "Observed transaction activity in USD.",
+        "claim_type": "observed_fact",
+        "supporting_transaction_ids": [
+          "TX_3d8358dcb78db6b328ce_2",
+          "TX_3d8358dcb78db6b328ce_3"
+        ],
+        "supporting_chunk_ids": [],
+        "evidence_explanation": "Reproducible deterministic pattern; see linked metric.",
+        "support_status": "supported",
+        "metric_key": "USD.total"
+      },
+      {
+        "claim_id": "FACT-2",
+        "claim": "Amounts are multiples of a thousand currency units.",
+        "claim_type": "observed_fact",
+        "supporting_transaction_ids": [
+          "TX_3d8358dcb78db6b328ce_2",
+          "TX_3d8358dcb78db6b328ce_3"
+        ],
+        "supporting_chunk_ids": [],
+        "evidence_explanation": "Reproducible deterministic pattern; see linked metric.",
+        "support_status": "supported",
+        "metric_key": "USD.round_count"
+      },
+      {
+        "claim_id": "FACT-3",
+        "claim": "Deposits and withdrawals occur close together in time.",
+        "claim_type": "observed_fact",
+        "supporting_transaction_ids": [
+          "TX_3d8358dcb78db6b328ce_2",
+          "TX_3d8358dcb78db6b328ce_3"
+        ],
+        "supporting_chunk_ids": [],
+        "evidence_explanation": "Reproducible deterministic pattern; see linked metric.",
+        "support_status": "supported",
+        "metric_key": "USD.rapid_transaction_count"
+      },
+      {
+        "claim_id": "INTERPRETATION-1",
+        "claim": "Retrieved guidance provides context for reviewing the observed activity.",
+        "claim_type": "supported_interpretation",
+        "supporting_transaction_ids": [
+          "TX_3d8358dcb78db6b328ce_2",
+          "TX_3d8358dcb78db6b328ce_3"
+        ],
+        "supporting_chunk_ids": [
+          "DEMO-RAPID-001"
+        ],
+        "evidence_explanation": "Typology and relevance align; this establishes contextual relevance only, not legal applicability or wrongdoing.",
+        "support_status": "limited",
+        "metric_key": null
+      },
+      {
+        "claim_id": "CONCERN-1",
+        "claim": "The observed patterns may warrant review of economic rationale.",
+        "claim_type": "potential_concern",
+        "supporting_transaction_ids": [
+          "TX_3d8358dcb78db6b328ce_2",
+          "TX_3d8358dcb78db6b328ce_3"
+        ],
+        "supporting_chunk_ids": [
+          "DEMO-RAPID-001"
+        ],
+        "evidence_explanation": "A review question, not proof of misconduct.",
+        "support_status": "limited",
+        "metric_key": null
+      },
+      {
+        "claim_id": "ASSUMPTION-1",
+        "claim": "Intent and economic purpose cannot be established from transaction patterns alone.",
+        "claim_type": "unsupported_assumption",
+        "supporting_transaction_ids": [],
+        "supporting_chunk_ids": [],
+        "evidence_explanation": "No claim about customer intent is supported by this dataset.",
+        "support_status": "unsupported",
+        "metric_key": null
+      }
+    ],
+    "potential_concerns": [
+      "The observed patterns may warrant review of economic rationale."
+    ],
+    "unsupported_assumptions": [
+      "Intent and economic purpose cannot be established from transaction patterns alone."
+    ]
+  },
+  "missing_information_and_questions": {
+    "information_gaps": [
+      {
+        "field": "kyc",
+        "status": "not_provided",
+        "explanation": "Not provided to this workflow; availability in the case is unknown.",
+        "question": "What verified KYC information is available?"
+      },
+      {
+        "field": "source_of_funds",
+        "status": "not_provided",
+        "explanation": "Not provided to this workflow; availability in the case is unknown.",
+        "question": "What evidence explains the source of funds?"
+      },
+      {
+        "field": "transaction_purpose",
+        "status": "not_provided",
+        "explanation": "Not provided to this workflow; availability in the case is unknown.",
+        "question": "What is the purpose of the highlighted transactions?"
+      },
+      {
+        "field": "sender_beneficiary_relationship",
+        "status": "not_provided",
+        "explanation": "Not provided to this workflow; availability in the case is unknown.",
+        "question": "What relationship links the sender and beneficiary?"
+      },
+      {
+        "field": "counterparty_information",
+        "status": "not_provided",
+        "explanation": "Not provided to this workflow; availability in the case is unknown.",
+        "question": "What verified counterparty information is available?"
+      },
+      {
+        "field": "economic_rationale",
+        "status": "not_provided",
+        "explanation": "Not provided to this workflow; availability in the case is unknown.",
+        "question": "What economic rationale explains the activity?"
+      },
+      {
+        "field": "supporting_documents",
+        "status": "not_provided",
+        "explanation": "Not provided to this workflow; availability in the case is unknown.",
+        "question": "Which supporting documents are available for review?"
+      }
+    ],
+    "investigation_questions": [
+      "What verified KYC information is available?",
+      "What evidence explains the source of funds?",
+      "What is the purpose of the highlighted transactions?",
+      "What relationship links the sender and beneficiary?",
+      "What verified counterparty information is available?",
+      "What economic rationale explains the activity?",
+      "Which supporting documents are available for review?"
+    ]
+  },
+  "investigation_narrative": {
+    "statements": [
+      "The observed activity requires contextual human review.",
+      "Observed transaction activity in USD.",
+      "Amounts are multiples of a thousand currency units.",
+      "Deposits and withdrawals occur close together in time.",
+      "Retrieved guidance provides context for reviewing the observed activity.",
+      "The observed patterns may warrant review of economic rationale.",
+      "Intent and economic purpose cannot be established from transaction patterns alone."
+    ],
+    "recommended_next_steps": [
+      "Review the cited transactions and guidance.",
+      "Confirm the availability of the listed case information.",
+      "Assess the documented concerns with a human investigator."
+    ],
+    "limitations": [
+      "Observed window only; no historical baseline or proof of criminal activity.",
+      "Threshold clustering uses an illustrative USD parameter, not a regulatory threshold.",
+      "Rapid movement is temporal proximity, not traced ownership or flow of funds.",
+      "Illustrative offline fixtures, not authoritative regulatory guidance."
+    ]
+  },
+  "human_review_disclaimer": "Human review required. Only a human investigator may escalate, request additional information, or close an alert as a false positive. This report is not a determination of criminal activity."
+}

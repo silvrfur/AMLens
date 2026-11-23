@@ -1,0 +1,7 @@
+.venv/
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+# local agent runtime store used for manual checks (see .env.example)
+agent_runtime_check.db

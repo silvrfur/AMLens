@@ -1,0 +1,8 @@
+
+fastapi
+uvicorn
+pydantic>=2,<3
+sentence-transformers
+faiss-cpu
+numpy
+pymupdf

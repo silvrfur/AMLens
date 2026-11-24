@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.database.connection import engine
 from app.database import tables  # noqa: F401; registers ORM models
 from app.database.schema_check import assert_schema_current
-from app.api import upload, alerts, transactions, investigations
+from app.api import upload, alerts, transactions, investigations, health
 
 
 @asynccontextmanager
@@ -29,7 +29,4 @@ app.include_router(upload.router, tags=['Uploads'])
 app.include_router(alerts.router, tags=['Alerts'])
 app.include_router(transactions.router, tags=['Transactions'])
 app.include_router(investigations.router, tags=['Investigations'])
-
-@app.get('/health')
-def health():
-    return {'status':'ok'}
+app.include_router(health.router, tags=['Health'])

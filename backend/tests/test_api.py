@@ -28,8 +28,11 @@ def test_upload_and_alert_and_investigation(client):
     assert body['accepted'] == 1 and body['alerts_created'] == 1
     assert body['ground_truth_exposed'] is False
 
-    alerts = client.get('/alerts').json()
+    page = client.get('/alerts').json()
+    assert page['total'] == 1 and page['limit'] == 50 and page['offset'] == 0
+    alerts = page['items']
     assert len(alerts) == 1
+    assert alerts[0]['created_at']                       # frontend shows it
     assert alerts[0]['rule_id'] == 'HIGH_VALUE'
     assert isinstance(alerts[0]['evidence'], dict)       # JSONB round-trip
     assert all('Is Laundering' not in a and 'ground_truth' not in a for a in alerts)
@@ -53,12 +56,19 @@ def test_upload_and_alert_and_investigation(client):
     detail = client.get(f'/investigations/{iid}').json()
     assert detail['rule_id'] == 'HIGH_VALUE'
     assert detail['execution_status'] == run.json()['execution_status']
+    assert detail['created_at'] and detail['decision'] is None
+
+    listed = client.get('/investigations').json()
+    assert [i['investigation_id'] for i in listed] == [iid]
+    assert listed[0]['execution_status'] == detail['execution_status']
 
     decision = client.post(f'/investigations/{iid}/decision', json={
         'decision': 'ESCALATE', 'rationale': 'Needs additional supporting evidence.',
         'analyst_id': 'test-analyst'})
     assert decision.status_code == 200, decision.text
     assert decision.json()['status'] == 'ESCALATE'
+    assert decision.json()['decision'] == 'ESCALATE' and decision.json()['created_at']
+    assert client.get(f'/investigations/{iid}').json()['decision']['analyst_id'] == 'test-analyst'
 
     audit = client.get(f'/audit/{iid}').json()
     assert [e['action'] for e in audit] == [
@@ -75,10 +85,26 @@ def test_duplicate_upload_rejected(client):
 def test_account_history_uses_tokens_and_exact_amounts(client):
     csv = HEADER + '2022-09-01 10:00:00,001,A,002,B,100.12345678,Euro,100.12345678,Euro,ACH,0\n'
     assert _upload(client, csv).status_code == 200
-    alerts = client.get('/alerts').json()
-    assert alerts == []
+    assert client.get('/alerts').json()['items'] == []
     from app.utils.tokenization import account_token
     history = client.get(f"/accounts/{account_token('001', 'A')}/history").json()
     assert len(history) == 1
     assert history[0]['amount_paid'] == '100.12345678'       # NUMERIC, no float drift
     assert history[0]['timestamp'] == '2022-09-01T10:00:00'
+
+
+def test_pending_investigation_has_stable_shape(client):
+    assert _upload(client).status_code == 200
+    alert_id = client.get('/alerts').json()['items'][0]['id']
+    iid = client.post('/investigate/' + alert_id).json()['investigation_id']
+    [case] = client.get('/investigations').json()
+    assert case['investigation_id'] == iid and case['execution_status'] == 'pending'
+    assert case['verification'] == {'passed': False, 'errors': [], 'warnings': []}
+    assert client.get('/investigations?limit=0').status_code == 400
+
+
+def test_health_reports_each_service(client, monkeypatch):
+    monkeypatch.setenv('USE_MOCK_RAG', 'true')
+    body = client.get('/health').json()
+    assert body['status'] == 'ok' and body['backend'] == 'healthy' and body['agent'] == 'healthy'
+    assert body['rag'] == 'degraded' and body['checked_at']

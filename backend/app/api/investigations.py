@@ -15,11 +15,50 @@ from app.services import agent_bridge
 router = APIRouter()
 
 
-def _agent_record(investigation_id: str):
+def _agent_record(investigation_id: str, persistence=None):
     try:
-        return agent_bridge.get_agent_persistence().get(investigation_id)
+        return (persistence or agent_bridge.get_agent_persistence()).get(investigation_id)
     except (OSError, ValueError) as exc:
         raise HTTPException(503, 'Agent persistence unavailable') from exc
+
+
+_NO_VERIFICATION = {'passed': False, 'errors': [], 'warnings': []}
+# Case status -> run status when the agents have not persisted a record yet.
+_PENDING_EXECUTION = {'RUNNING': 'running', 'FAILED': 'failed'}
+
+
+def _decision_out(d):
+    if d is None:
+        return None
+    return {'decision_id': d.id, 'decision': d.decision, 'rationale': d.rationale,
+            'analyst_id': d.analyst_id, 'created_at': d.created_at.isoformat()}
+
+
+def _summary(inv, record, decision):
+    """Case summary shared by the list and detail endpoints (always the same shape)."""
+    return {'investigation_id': inv.id, 'alert_id': inv.alert_id, 'status': inv.status,
+            'execution_status': record['execution_status'] if record
+            else _PENDING_EXECUTION.get(inv.status, 'pending'),
+            'report_available': record is not None and record['report'] is not None,
+            'verification': (record and record['verification']) or dict(_NO_VERIFICATION),
+            'created_at': inv.created_at.isoformat(),
+            'decision': _decision_out(decision)}
+
+
+@router.get('/investigations')
+def list_investigations(limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
+    """Newest cases first, with each run's status and verification."""
+    if limit < 1 or limit > 200 or offset < 0:
+        raise HTTPException(400, 'Invalid pagination')
+    cases = (db.query(Investigation).order_by(Investigation.created_at.desc(), Investigation.id)
+             .offset(offset).limit(limit).all())
+    decisions = {d.investigation_id: d for d in db.query(InvestigatorDecision)
+                 .filter(InvestigatorDecision.investigation_id.in_([c.id for c in cases]))}
+    try:
+        persistence = agent_bridge.get_agent_persistence()
+    except (OSError, ValueError) as exc:
+        raise HTTPException(503, 'Agent persistence unavailable') from exc
+    return [_summary(c, _agent_record(c.id, persistence), decisions.get(c.id)) for c in cases]
 
 
 @router.post('/investigate/{alert_id}', status_code=201)
@@ -39,7 +78,7 @@ def start_investigation(alert_id: str, db: Session = Depends(get_db)):
 
 @router.post('/investigations/{id}/run')
 def run_investigation(id: str, db: Session = Depends(get_db)):
-    """DEV ONLY: run the agent workflow synchronously using mock LLM and mock RAG."""
+    """Run the agent workflow synchronously (LLM/RAG mock or live per USE_MOCK_LLM / USE_MOCK_RAG)."""
     inv = db.get(Investigation, id)
     if not inv:
         raise HTTPException(404, 'Investigation not found')
@@ -90,12 +129,8 @@ def get_investigation(id: str, db: Session = Depends(get_db)):
     if not inv:
         raise HTTPException(404, 'Investigation not found')
     a = db.get(Alert, inv.alert_id)
-    result = _agent_record(id)
-    return {'investigation_id': id, 'alert_id': inv.alert_id,
-            'status': inv.status,
-            'execution_status': result['execution_status'] if result else None,
-            'report_available': result is not None and result['report'] is not None,
-            'verification': result['verification'] if result else None,
+    decision = db.query(InvestigatorDecision).filter_by(investigation_id=id).first()
+    return {**_summary(inv, _agent_record(id), decision),
             'evidence': a.evidence, 'rule_id': a.rule_id}
 
 
@@ -133,7 +168,7 @@ def decide(id: str, payload: DecisionIn, db: Session = Depends(get_db)):
                       details={'decision': payload.decision, 'analyst_id': payload.analyst_id,
                                'decision_id': d.id, 'rationale': payload.rationale}))
     db.commit()
-    return {'decision_id': d.id, 'investigation_id': id, 'status': inv.status}
+    return {**_decision_out(d), 'investigation_id': id, 'status': inv.status}
 
 
 @router.get('/audit/{id}')

@@ -23,6 +23,9 @@ acr_build() {
   [ "$status" = Succeeded ] || { echo "Image build failed (${status:-error}): $*  -> az acr task list-runs -r $ACR"; exit 1; }
   echo "  built: $2"
 }
+# Build contexts are clean exports of the committed code (git archive): no node_modules,
+# .venv or git-ignored files such as .env, and no Windows path-length failures.
+ctx() { local d="$CTX/$1"; shift; rm -rf "$d"; mkdir -p "$d"; git archive --format=tar HEAD "$@" | tar -x -C "$d"; printf %s "$d"; }
 RG="${RG:-tpl-azure-aks--mazeazusrqn9-ongz-sbx}"
 LOC="${LOC:-southindia}"
 SUF="$(printf %s "$RG" | md5sum | cut -c1-6)"
@@ -88,10 +91,14 @@ kubectl get nodes -o wide
 
 # ------------------------------------------------------------------ 2. images
 say "2/7 Images (built in ACR)"
-acr_build -t "amlens-rag:$TAG" RAG
-acr_build -t "amlens-backend:$TAG" -f backend/Dockerfile .
-acr_build -t "amlens-frontend:$TAG" frontend
-[ "${SEED:-0}" != 1 ] || acr_build -t "amlens-seed:$TAG" infra/seed
+CTX="$(mktemp -d)"
+acr_build -t "amlens-rag:$TAG" "$(ctx rag RAG)/RAG"
+acr_build -t "amlens-backend:$TAG" -f backend/Dockerfile "$(ctx backend backend agents .dockerignore)"
+acr_build -t "amlens-frontend:$TAG" "$(ctx frontend frontend)/frontend"
+if [ "${SEED:-0}" = 1 ]; then   # seed.sql is generated locally and git-ignored
+  SEED_CTX="$(ctx seed infra/seed)/infra/seed"; cp infra/seed/seed.sql "$SEED_CTX/"
+  acr_build -t "amlens-seed:$TAG" "$SEED_CTX"
+fi
 for img in "docker.io/library/postgres:16-alpine library/postgres:16-alpine" \
            "quay.io/oauth2-proxy/oauth2-proxy:v7.7.1 oauth2-proxy/oauth2-proxy:v7.7.1" \
            "docker.io/curlimages/curl:8.11.0 curlimages/curl:8.11.0"; do

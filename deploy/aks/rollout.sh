@@ -15,6 +15,9 @@ acr_build() {
   [ "$status" = Succeeded ] || { echo "Image build failed (${status:-error}): $*  -> az acr task list-runs -r $ACR"; exit 1; }
   echo "  built: $2"
 }
+# Build contexts are clean exports of the committed code (git archive): no node_modules,
+# .venv or git-ignored files such as .env, and no Windows path-length failures.
+ctx() { local d="$CTX/$1"; shift; rm -rf "$d"; mkdir -p "$d"; git archive --format=tar HEAD "$@" | tar -x -C "$d"; printf %s "$d"; }
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; cd "$ROOT"
 RG="${RG:-tpl-azure-aks--mazeazusrqn9-ongz-sbx}"
@@ -28,9 +31,10 @@ TAG="${TAG:-$(git rev-parse --short HEAD)}"
 BUILD="$(mktemp -d)"
 
 echo "== Build $TAG"
-acr_build -t "amlens-rag:$TAG" RAG
-acr_build -t "amlens-backend:$TAG" -f backend/Dockerfile .
-acr_build -t "amlens-frontend:$TAG" frontend
+CTX="$(mktemp -d)"
+acr_build -t "amlens-rag:$TAG" "$(ctx rag RAG)/RAG"
+acr_build -t "amlens-backend:$TAG" -f backend/Dockerfile "$(ctx backend backend agents .dockerignore)"
+acr_build -t "amlens-frontend:$TAG" "$(ctx frontend frontend)/frontend"
 
 echo "== Cluster credentials"
 az aks get-credentials -g "$RG" -n "$AKS" --overwrite-existing --file "$BUILD/kubeconfig" -o none

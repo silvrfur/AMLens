@@ -23,6 +23,9 @@ METADATA_PATH = (
 # Confirm each annotation points to the intended passage.
 REQUIRED_PHRASES = {
     "structuring": "intentionally structuring",
+    "unusual_activity": "unusual patterns",
+    "rapid_movement": "High account turnover",
+    "fan_in_out": "multiple small deposits",
     "customer_due_diligence": "Customer Due Diligence (CDD)",
     "enhanced_due_diligence": "Enhanced Due Diligence (EDD) Norms",
     "ongoing_monitoring": "On-going Due Diligence",

@@ -3841,5 +3841,14 @@
         "chunk_index": 1,
         "text": "www.fatf-gafi.org",
         "char_count": 17
+    },
+    {
+        "chunk_id": "FATF_Recommendations_p73_unusual_activity_1",
+        "document_id": "FATF_Recommendations",
+        "document_name": "FATF_Recommendations.pdf",
+        "page_number": 73,
+        "chunk_index": 4,
+        "text": "20. \nFinancial institutions should examine, as far as reasonably possible, the background and \npurpose of all complex, unusual large transactions, and all unusual patterns of transactions, \nwhich have no apparent economic or lawful purpose. Where the risks of money laundering or \nterrorist financing are higher, financial institutions should be required to conduct enhanced \nCDD measures, consistent with the risks identified. In particular, they should increase the \ndegree and nature of monitoring of the business relationship, in order to determine whether \nthose transactions or activities appear unusual or suspicious.",
+        "char_count": 624
     }
 ]

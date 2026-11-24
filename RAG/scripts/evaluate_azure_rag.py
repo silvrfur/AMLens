@@ -1,14 +1,39 @@
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-API_URL = "http://127.0.0.1:8000/search"
+# Override when the service runs elsewhere, e.g. RAG_EVAL_URL=http://127.0.0.1:8001/search
+API_URL = os.getenv("RAG_EVAL_URL", "http://127.0.0.1:8000/search")
+# Must match TeamAzureSearchAdapter.min_score.
+MIN_RELEVANCE = 0.40
 
 TEST_CASES = [
+    {
+        "typology": "unusual_activity",
+        "query": "Which unusual transaction patterns without an apparent economic purpose require closer monitoring?",
+        "chunk": "RBI_KYC_Master_Direction_p40_unusual_activity_1",
+        "source": "RBI_KYC_Master_Direction.pdf",
+        "page": 40,
+    },
+    {
+        "typology": "rapid_movement",
+        "query": "What account turnover and cash withdrawal patterns should banks monitor?",
+        "chunk": "RBI_KYC_Master_Direction_p40_rapid_movement_1",
+        "source": "RBI_KYC_Master_Direction.pdf",
+        "page": 40,
+    },
+    {
+        "typology": "fan_in_out",
+        "query": "What should a bank do when many small deposits from across the country go into one account?",
+        "chunk": "RBI_KYC_Master_Direction_p41_fan_in_out_1",
+        "source": "RBI_KYC_Master_Direction.pdf",
+        "page": 41,
+    },
     {
         "typology": "structuring",
         "query": "What are the indicators of structuring transactions below reporting thresholds?",
@@ -127,7 +152,7 @@ def evaluate(test):
         and bool(hit.get("text", "").strip())
         and test["chunk"] in references
         and isinstance(score, (int, float))
-        and 0.50 <= score <= 1.0
+        and MIN_RELEVANCE <= score <= 1.0
     )
 
     return {

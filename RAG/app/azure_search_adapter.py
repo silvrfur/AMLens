@@ -35,9 +35,15 @@ class TeamAzureSearchAdapter:
             retry_total=0
         )
 
-        # Provisional cutoff for initial testing.
-        # Calibrate this using retrieval evaluation cases.
-        self.min_score = 0.50
+        # Calibrated 2026-11-24 on text-embedding-3-small, within the
+        # typology pre-filter (every candidate is a human-verified passage):
+        #   agent's descriptive queries .......... 0.46 - 0.66
+        #   other AML topics (e.g. onboarding) ... 0.27 - 0.37
+        #   unrelated text ....................... <= 0.12
+        # 0.40 keeps real agent queries and drops off-topic ones. The old
+        # 0.50 cutoff dropped every agent query, including structuring.
+        # Re-check these ranges if the embedding model or corpus changes.
+        self.min_score = 0.40
 
     def search_aml_guidance(
         self,

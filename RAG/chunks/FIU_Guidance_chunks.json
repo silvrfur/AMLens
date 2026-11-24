@@ -331,5 +331,14 @@
         "chunk_index": 2,
         "text": "shared includes: \na. ML/TF risk assessments; \nb. Typologies (i.e. case studies) of how money launderers or terrorist financers \nhave misused relevant persons as notified under ‘the notification’; \nc. Feedback on STRs and other relevant reports; \nd. Targeted unclassified intelligence. In specific circumstances, and subject to \nappropriate safeguards such as confidentiality agreements, it may also be \nappropriate for authorities to share targeted confidential information with the \nrelevant persons as notified under ‘the notification’. \ne. Countries, persons or organisations whose assets or transactions should be \nfrozen pursuant to targeted financial sanctions. \n \n \n***",
         "char_count": 676
+    },
+    {
+        "chunk_id": "FIU_Guidance_p10_unusual_activity_1",
+        "document_id": "FIU_Guidance",
+        "document_name": "FIU_Guidance.pdf",
+        "page_number": 10,
+        "chunk_index": 4,
+        "text": "4.10.1 Relevant persons as notified under ‘the notification’, should examine, as far as \nreasonably possible, the background and purpose of all complex, unusually \nlarge transactions, and all unusual patterns of transactions carried out on behalf \nof their clients,, which have no apparent economic or lawful purpose. Where the \nrisks of money laundering, terrorist financing or proliferation financing are \nhigher, they must conduct enhanced due diligence, consistent with the risks \nidentified. In particular, they should increase the degree and nature of \nmonitoring of the business relationship, in order to determine whether those \ntransactions or activities appear unusual or suspicious.",
+        "char_count": 693
     }
 ]

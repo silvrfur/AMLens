@@ -18,6 +18,47 @@ VERIFIED_CHUNKS = {
         }
     },
 
+    # Complete paragraphs added by scripts/add_verified_typology_chunks.py
+    # (reviewed 2026-11-24). One typology per chunk.
+    "unusual_activity": {
+        "RBI_KYC_Master_Direction_p40_unusual_activity_1": {
+            "section": (
+                "Chapter VI - Customer Due Diligence (CDD) Procedure, "
+                "E. On-going Due Diligence, Paragraphs 39 and 40(1)"
+            )
+        },
+        "FIU_Guidance_p10_unusual_activity_1": {
+            "section": (
+                "4.10 Enhanced Due Diligence (EDD) Norms, 4.10.1"
+            )
+        },
+        "FATF_Recommendations_p73_unusual_activity_1": {
+            "section": (
+                "Interpretive Note to Recommendation 10 "
+                "(Customer Due Diligence), Enhanced CDD measures, "
+                "Paragraph 20"
+            )
+        }
+    },
+
+    "rapid_movement": {
+        "RBI_KYC_Master_Direction_p40_rapid_movement_1": {
+            "section": (
+                "Chapter VI - Customer Due Diligence (CDD) Procedure, "
+                "E. On-going Due Diligence, Paragraph 40"
+            )
+        }
+    },
+
+    "fan_in_out": {
+        "RBI_KYC_Master_Direction_p41_fan_in_out_1": {
+            "section": (
+                "Chapter VI - Customer Due Diligence (CDD) Procedure, "
+                "E. On-going Due Diligence, Paragraph 41(2), Explanation"
+            )
+        }
+    },
+
     "customer_due_diligence": {
         "RBI_KYC_Master_Direction_p11_c2": {
             "section": (

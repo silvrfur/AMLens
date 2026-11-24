@@ -57,9 +57,14 @@ spec:
             - --set-xauthrequest=true
             - --cookie-secure=true
             - --cookie-samesite=lax
-            - --skip-provider-button=true
             - --redirect-url=https://__HOST__/oauth2/callback
             - --whitelist-domain=__HOST__
+            # Username/password accounts (bcrypt, secret amlens-htpasswd). The lab tenant needs an
+            # admin to approve the Entra ID app, so its button is hidden by the custom sign-in page;
+            # drop these three flags (and the templates) to go back to Entra ID once approved.
+            - --htpasswd-file=/etc/oauth2-proxy/htpasswd/users
+            - --display-htpasswd-form=true
+            - --custom-templates-dir=/etc/oauth2-proxy/templates
           env:
             - name: OAUTH2_PROXY_CLIENT_ID
               valueFrom: { secretKeyRef: { name: amlens-oauth, key: client-id } }
@@ -69,9 +74,17 @@ spec:
               valueFrom: { secretKeyRef: { name: amlens-oauth, key: cookie-secret } }
           ports: [{ containerPort: 4180 }]
           readinessProbe: { httpGet: { path: /ping, port: 4180 }, periodSeconds: 10 }
+          volumeMounts:
+            - { name: htpasswd, mountPath: /etc/oauth2-proxy/htpasswd, readOnly: true }
+            - { name: templates, mountPath: /etc/oauth2-proxy/templates, readOnly: true }
           resources:
             requests: { cpu: 25m, memory: 32Mi }
             limits: { memory: 128Mi }
+      volumes:
+        - name: htpasswd
+          secret: { secretName: amlens-htpasswd }
+        - name: templates
+          configMap: { name: signin-templates }
 ---
 apiVersion: v1
 kind: Service
@@ -89,7 +102,7 @@ metadata:
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt
     nginx.ingress.kubernetes.io/auth-url: "http://oauth2-proxy.amlens.svc.cluster.local:4180/oauth2/auth"
-    nginx.ingress.kubernetes.io/auth-signin: "https://$host/oauth2/start?rd=$escaped_request_uri"
+    nginx.ingress.kubernetes.io/auth-signin: "https://$host/oauth2/sign_in?rd=$escaped_request_uri"
     # Copies the signed-in user from oauth2-proxy onto the request (overwriting any client copy).
     nginx.ingress.kubernetes.io/auth-response-headers: "X-Auth-Request-Email,X-Auth-Request-User"
     nginx.ingress.kubernetes.io/proxy-body-size: "25m"       # CSV uploads
@@ -105,10 +118,16 @@ spec:
             pathType: Prefix
             backend: { service: { name: frontend, port: { number: 3000 } } }
 ---
-# Sign-in endpoints (/oauth2/start, /oauth2/callback, /oauth2/sign_out).
+# Sign-in endpoints (/oauth2/sign_in, /oauth2/sign_out, ...), rate-limited per client IP
+# to slow down password guessing.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
-metadata: { name: amlens-oauth2, namespace: amlens }
+metadata:
+  name: amlens-oauth2
+  namespace: amlens
+  annotations:
+    nginx.ingress.kubernetes.io/limit-rpm: "20"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "2"
 spec:
   ingressClassName: amlens-nginx
   tls: [{ hosts: [__HOST__], secretName: amlens-tls }]

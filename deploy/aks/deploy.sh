@@ -178,6 +178,9 @@ run_job migrate
 # Order: RAG, then backend, then frontend.
 kubectl apply -n amlens -f "$BUILD/apps.yaml" >/dev/null
 for d in rag backend frontend; do kubectl -n amlens rollout status "deploy/$d" --timeout=600s; done
+# Sign-in: username/password accounts (the lab tenant needs an admin to approve Entra ID apps).
+kubectl -n amlens get secret amlens-htpasswd >/dev/null 2>&1 || bash deploy/aks/add-user.sh "${FIRST_USER:-analyst}"
+kubectl apply -f "$BUILD/signin-templates.yaml" >/dev/null
 kubectl apply -f "$BUILD/edge.yaml" >/dev/null
 kubectl -n amlens rollout status deploy/oauth2-proxy --timeout=300s
 

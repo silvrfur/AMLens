@@ -30,8 +30,8 @@ export function DashboardPage() {
   const auditQueries = useQueries({ queries: investigations.slice(0, 4).map((item) => ({ queryKey: ["audit", item.investigation_id], queryFn: () => api.getAudit(item.investigation_id) })) });
   const alerts = alertsQuery.data?.items ?? [];
   const openCount = alerts.filter((item) => item.status === "OPEN").length;
-  const pendingCount = investigations.filter((item) => item.execution_status === "running").length;
-  const awaitingDecisionCount = investigations.filter((item) => item.execution_status !== "running" && !item.decision).length;
+  const pendingCount = investigations.filter((item) => item.execution_status === "running" || item.execution_status === "pending").length;
+  const awaitingDecisionCount = investigations.filter((item) => item.execution_status !== "running" && item.execution_status !== "pending" && !item.decision).length;
   const decisionsCount = investigations.filter((item) => Boolean(item.decision)).length;
   const verifiedCount = investigations.filter((item) => item.verification.passed).length;
   const verificationRate = investigations.length ? Math.round((verifiedCount / investigations.length) * 100) : 0;

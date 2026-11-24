@@ -9,7 +9,7 @@ import { Columns3, Download, Filter, Search } from "lucide-react";
 import { PageHeader, Panel, StatusBadge, LoadingRows, ErrorPanel, CopyableId } from "@/components/shared";
 import { api } from "@/lib/api/client";
 import type { Alert } from "@/lib/api/types";
-import { compareDecimalStrings, downloadCsv, formatAccountToken, formatDate, formatMoneyString, humanize } from "@/lib/format";
+import { alertAmount, alertCreatedAt, compareDecimalStrings, downloadCsv, formatAccountToken, formatDate, formatMoneyString, humanize } from "@/lib/format";
 
 export function AlertsPage({ initialSearch = "" }: { initialSearch?: string }) {
   const router = useRouter();
@@ -31,29 +31,29 @@ export function AlertsPage({ initialSearch = "" }: { initialSearch?: string }) {
     { accessorKey: "description", header: "Description", cell: ({ row }) => <span className="table-description">{row.original.description}</span> },
     { accessorKey: "transaction_id", header: "Transaction ID", cell: ({ row }) => <span className="mono">{row.original.transaction_id}</span> },
     { id: "account", accessorFn: (row) => String(row.evidence.anchor_account_token), header: "Account", cell: ({ row }) => <span className="mono">{formatAccountToken(String(row.original.evidence.anchor_account_token))}</span> },
-    { id: "amount", enableSorting: false, header: "Amount", cell: ({ row }) => <span className="tabular-nums">{formatMoneyString(String(row.original.evidence.amount_paid), String(row.original.evidence.currency))}</span> },
+    { id: "amount", enableSorting: false, header: "Amount", cell: ({ row }) => { const amount = alertAmount(row.original.evidence); return <span className="tabular-nums">{amount === null ? "—" : formatMoneyString(amount, String(row.original.evidence.currency))}</span>; } },
     { accessorKey: "status", header: "Status", cell: ({ row }) => <StatusBadge status={row.original.status} /> },
-    { id: "created", accessorFn: (row) => String(row.evidence.created_at), header: "Created", cell: ({ row }) => formatDate(String(row.original.evidence.created_at), { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) },
+    { id: "created", accessorFn: (row) => alertCreatedAt(row) ?? "", header: "Created", cell: ({ row }) => formatDate(alertCreatedAt(row.original), { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) },
     { id: "action", header: "", enableSorting: false, cell: ({ row }) => <Link className="inline-link" href={`/alerts/${row.original.id}`} onClick={(event) => event.stopPropagation()}>Review</Link> },
   ], []);
   const source = query.data?.items ?? [];
   const decimalInputValid = (value: string) => value === "" || /^-?\d+(?:\.\d+)?$/.test(value);
   const filtered = source.filter((alert) => {
-    const amount = String(alert.evidence.amount_paid);
-    const created = String(alert.evidence.created_at).slice(0, 10);
+    const amount = alertAmount(alert.evidence);
+    const created = (alertCreatedAt(alert) ?? "").slice(0, 10);
     const text = `${alert.id} ${alert.rule_id} ${alert.description} ${alert.evidence.anchor_account_token} ${alert.transaction_id}`.toLowerCase();
     return (!search || text.includes(search.toLowerCase()))
       && (statusFilter === "all" || alert.status === statusFilter)
       && (ruleFilter === "all" || alert.rule_id === ruleFilter)
-      && (!minAmount || !decimalInputValid(minAmount) || compareDecimalStrings(amount, minAmount) >= 0)
-      && (!maxAmount || !decimalInputValid(maxAmount) || compareDecimalStrings(amount, maxAmount) <= 0)
+      && (!minAmount || !decimalInputValid(minAmount) || (amount !== null && compareDecimalStrings(amount, minAmount) >= 0))
+      && (!maxAmount || !decimalInputValid(maxAmount) || (amount !== null && compareDecimalStrings(amount, maxAmount) <= 0))
       && (!fromDate || created >= fromDate)
       && (!toDate || created <= toDate);
   });
   const table = useReactTable({ data: filtered, columns, getCoreRowModel: getCoreRowModel(), getSortedRowModel: getSortedRowModel(), manualPagination: true, pageCount: Math.ceil((query.data?.total ?? 0) / pagination.pageSize), state: { pagination, sorting, columnVisibility }, onPaginationChange: setPagination, onSortingChange: setSorting, onColumnVisibilityChange: setColumnVisibility });
   const pageCount = Math.ceil((query.data?.total ?? 0) / pagination.pageSize);
   const total = query.data?.total ?? 0;
-  const exportCurrentPage = () => downloadCsv("amlens-alerts-current-page.csv", filtered.map((alert) => ({ alert_id: alert.id, transaction_id: alert.transaction_id, rule_id: alert.rule_id, description: alert.description, account_token: formatAccountToken(String(alert.evidence.anchor_account_token)),  amount: alert.evidence.amount_paid as string, currency: alert.evidence.currency as string, status: alert.status, created_at: alert.evidence.created_at as string })));
+  const exportCurrentPage = () => downloadCsv("amlens-alerts-current-page.csv", filtered.map((alert) => ({ alert_id: alert.id, transaction_id: alert.transaction_id, rule_id: alert.rule_id, description: alert.description, account_token: formatAccountToken(String(alert.evidence.anchor_account_token)),  amount: alertAmount(alert.evidence) ?? "", currency: alert.evidence.currency as string, status: alert.status, created_at: alert.evidence.created_at as string })));
   const setFilter = (callback: () => void) => { callback(); setPagination((current) => ({ ...current, pageIndex: 0 })); };
   return <>
     <PageHeader eyebrow="TRANSACTION MONITORING" title="Alert queue" description="Review and triage alerts generated by transaction monitoring rules." action={<button type="button" className="button-secondary" onClick={exportCurrentPage}><Download />Export current page</button>} />

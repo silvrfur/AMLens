@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageHeader, Panel, StatusBadge, CopyableId, LoadingRows, ErrorPanel, DisclaimerCallout } from "@/components/shared";
 import { api } from "@/lib/api/client";
 import type { GapStatus } from "@/lib/api/types";
-import { formatAccountToken, formatDate, formatMoneyString, humanize } from "@/lib/format";
+import { alertAmount, alertCreatedAt, formatAccountToken, formatDate, formatMoneyString, humanize } from "@/lib/format";
 
 const gapNames: Record<GapStatus, string> = { confirmed_missing: "Confirmed missing", not_provided: "Not provided", not_applicable: "Not applicable", available_verified: "Available / verified" };
 const steps = ["Transaction Analysis", "AML Knowledge Retrieval", "Evidence Correlation", "Information Gap", "Report Drafting", "Verifier"];
@@ -40,7 +40,7 @@ export function AlertDetailPage() {
   const alertQuery = useQuery({ queryKey: ["alert", alertId], queryFn: () => api.getAlert(alertId), enabled: Boolean(alertId) });
   const investigationsQuery = useQuery({ queryKey: ["investigations"], queryFn: () => api.getInvestigations() });
   const existing = useMemo(() => investigationsQuery.data?.find((item) => item.alert_id === alertId), [investigationsQuery.data, alertId]);
-  const reportQuery = useQuery({ queryKey: ["investigation-report", existing?.investigation_id], queryFn: () => api.getInvestigationReport(existing!.investigation_id), enabled: Boolean(existing && existing.execution_status !== "running") });
+  const reportQuery = useQuery({ queryKey: ["investigation-report", existing?.investigation_id], queryFn: () => api.getInvestigationReport(existing!.investigation_id), enabled: Boolean(existing && existing.execution_status !== "running" && existing.execution_status !== "pending") });
   const accountToken = formatAccountToken(String(alertQuery.data?.evidence.anchor_account_token ?? ""));
   const hasAccountToken = accountToken !== "Tokenized reference unavailable";
   const transactionsQuery = useQuery({ queryKey: ["account-history", accountToken], queryFn: () => api.getAccountHistory(accountToken, 100), enabled: hasAccountToken });
@@ -48,7 +48,7 @@ export function AlertDetailPage() {
     mutationFn: async () => {
       if (!alertQuery.data) throw new Error("Alert is not available.");
       setActiveStep(0);
-      const investigation = existing?.execution_status === "running"
+      const investigation = existing?.execution_status === "running" || existing?.execution_status === "pending"
         ? { investigation_id: existing.investigation_id }
         : await api.investigateAlert(alertQuery.data.id);
       setActiveStep(1);
@@ -66,8 +66,8 @@ export function AlertDetailPage() {
   if (alertQuery.isError || !alertQuery.data) return <><PageHeader backHref="/alerts" title="Alert not found" description="This alert could not be loaded." /><ErrorPanel message={alertQuery.error?.message ?? "Alert not found."} onRetry={() => alertQuery.refetch()} /></>;
   const alert = alertQuery.data;
   const transactionIds = Array.isArray(alert.evidence.transaction_ids) ? alert.evidence.transaction_ids as string[] : [alert.transaction_id];
-  const createdAt = String(alert.evidence.created_at);
-  const amount = String(alert.evidence.amount_paid);
+  const createdAt = alertCreatedAt(alert);
+  const amount = alertAmount(alert.evidence);
   const chartRows = (transactionsQuery.data ?? []).slice().sort((a, b) => a.timestamp.localeCompare(b.timestamp)).map((transaction) => ({ ...transaction, plotAmount: amountForPlot(transaction.amount_paid), isAnchor: transaction.transaction_id === alert.transaction_id }));
   const anchorPoint = chartRows.find((transaction) => transaction.isAnchor);
 
@@ -79,10 +79,10 @@ export function AlertDetailPage() {
       <div className="detail-main">
         <Panel title="Alert summary" description={alert.description}>
           <div className="detail-summary-grid">
-            <div className="detail-summary-item"><span>Transaction amount</span><strong className="detail-amount">{formatMoneyString(amount, String(alert.evidence.currency))}</strong></div>
+            <div className="detail-summary-item"><span>Transaction amount</span><strong className="detail-amount">{amount === null ? "—" : formatMoneyString(amount, String(alert.evidence.currency))}</strong></div>
             <div className="detail-summary-item"><span>Anchor account</span><strong className="mono">{accountToken}</strong></div>
             <div className="detail-summary-item"><span>Monitoring rule</span><strong>{humanize(alert.rule_id)}</strong></div>
-            <div className="detail-summary-item"><span>Payment rail</span><strong>{String(alert.evidence.payment_format)}</strong></div>
+            <div className="detail-summary-item"><span>Payment rail</span><strong>{String(alert.evidence.payment_format ?? anchorPoint?.payment_format ?? "—")}</strong></div>
           </div>
           <div className="report-meta"><span className="subtle">Alert ID</span><CopyableId value={alert.id} /><span className="subtle">Primary transaction</span><CopyableId value={alert.transaction_id} /></div>
         </Panel>

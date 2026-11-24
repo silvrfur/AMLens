@@ -1,6 +1,6 @@
 export type Typology = "structuring" | "rapid_movement" | "fan_in_out" | "unusual_activity";
 export type GapStatus = "confirmed_missing" | "not_provided" | "not_applicable" | "available_verified";
-export interface Alert { id: string; transaction_id: string; rule_id: string; description: string; evidence: Record<string, unknown>; status: string; }
+export interface Alert { id: string; transaction_id: string; rule_id: string; description: string; evidence: Record<string, unknown>; status: string; created_at?: string | null; }
 export interface Guideline { chunk_id: string; text: string; source: string; section: string; page: number | null; typology: string; relevance_score: number; }
 export interface EvidenceFinding { claim_id: string; claim: string; claim_type: "observed_fact"|"supported_interpretation"|"unsupported_assumption"|"potential_concern"; supporting_transaction_ids: string[]; supporting_chunk_ids: string[]; evidence_explanation: string; support_status: "supported"|"limited"|"unsupported"; metric_key?: string | null; }
 export interface InformationGap { field: string; status: GapStatus; explanation: string; question?: string | null; }
@@ -18,7 +18,7 @@ export interface InvestigationReport {
 export interface Verification { passed: boolean; errors: string[]; warnings: string[]; }
 export interface ReportResponse { investigation_id: string; execution_status: "completed"|"incomplete"|"failed"|"running"; label: string; report: InvestigationReport; verification: Verification; agent_execution_trace: { agent_name: string; execution_status: string; error_message?: string | null }[]; }
 export type InvestigationStatus = "PENDING_AGENT" | "RUNNING" | "COMPLETED" | "INCOMPLETE" | "FAILED" | "APPROVE" | "REJECT" | "ESCALATE";
-export interface InvestigationSummary { investigation_id: string; alert_id: string; status: InvestigationStatus; execution_status: ReportResponse["execution_status"]; verification: Verification; created_at: string; decision?: Decision | null; }
+export interface InvestigationSummary { investigation_id: string; alert_id: string; status: InvestigationStatus; execution_status: ReportResponse["execution_status"] | "pending"; verification: Verification; created_at: string; decision?: Decision | null; }
 export interface Decision { decision: "APPROVE" | "REJECT" | "ESCALATE"; rationale: string; analyst_id: string; created_at: string; }
 export interface Transaction { transaction_id: string; timestamp: string; sender_token: string; receiver_token: string; amount_paid: string; payment_currency: string; amount_received: string; receiving_currency: string; payment_format: string; }
 export interface AuditEvent { event_id: string; action: "CREATED" | "AGENT_RUN_REQUESTED" | "AGENT_RUN_FINISHED" | "AGENT_RUN_FAILED" | "DECISION_RECORDED"; details: Record<string, unknown>; created_at: string; }

@@ -11,7 +11,7 @@ import { api, appConfig } from "@/lib/api/client";
 const navigation = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "Upload Data", href: "/upload", icon: FileUp },
-  { label: "Alert Queue", href: "/alerts", icon: AlertCircle, count: "25" },
+  { label: "Alert Queue", href: "/alerts", icon: AlertCircle },
   { label: "Investigations", href: "/investigations", icon: ClipboardList },
   { label: "Knowledge Base", href: "/knowledge", icon: BookOpen },
   { label: "Audit Trail", href: "/audit", icon: Activity },
@@ -29,6 +29,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const health = useQuery({ queryKey: ["health"], queryFn: api.getHealth, staleTime: 20_000, refetchInterval: 30_000 });
+  const alertTotal = useQuery({ queryKey: ["alerts-total"], queryFn: () => api.getAlerts(1, 0), staleTime: 30_000, refetchInterval: 60_000 }).data?.total;
   const healthStates = health.data ? [health.data.backend, health.data.agent, health.data.rag, health.data.queue] : [];
   const healthClass = health.isError ? "status-offline" : healthStates.includes("offline") ? "status-offline" : healthStates.includes("degraded") ? "status-warning" : health.isPending ? "status-checking" : "status-healthy";
   const healthLabel = health.isError ? "Health status unavailable" : healthStates.includes("offline") ? "Service offline" : healthStates.includes("degraded") ? "Service attention required" : health.isPending ? "Checking services" : "All systems operational";
@@ -53,9 +54,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const value = search.trim().toUpperCase();
-    if (value.startsWith("ALT-")) router.push(`/alerts/${encodeURIComponent(value)}`);
-    else if (value.startsWith("INV-")) router.push(`/investigations/${encodeURIComponent(value)}`);
+    // IDs are case-sensitive: backend alerts are AL_<hex>, investigations are UUIDs (mocks use ALT-/INV-).
+    const value = search.trim();
+    if (/^(ALT-|AL_)/i.test(value)) router.push(`/alerts/${encodeURIComponent(value)}`);
+    else if (/^INV-/i.test(value) || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) router.push(`/investigations/${encodeURIComponent(value)}`);
     else router.push(`/alerts?search=${encodeURIComponent(search.trim())}`);
   }
   function toggleTheme() {
@@ -71,7 +73,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="brand-row"><div className="brand-mark"><Shield aria-hidden="true" /></div>{!collapsed && <div className="brand-copy"><strong>AMLens</strong><span>COMPLIANCE WORKSPACE</span></div>}<button className="sidebar-collapse" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setCollapsed(!collapsed)}><ChevronLeft aria-hidden="true" /></button></div>
       <div className="workspace-label">WORKSPACE</div>
       <nav className="nav-list">
-        {navigation.map(({ label, href, icon: Icon, count }) => {
+        {navigation.map(({ label, href, icon: Icon }) => {
+          const count = href === "/alerts" && alertTotal !== undefined ? String(alertTotal) : null;
           const active = href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
           return <Link key={href} href={href} onClick={() => setMobileOpen(false)} title={collapsed ? label : undefined} className={`nav-item ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}>
             <Icon aria-hidden="true" /><span>{label}</span>{count && !collapsed && <small>{count}</small>}
@@ -88,7 +91,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <form onSubmit={handleSearch} className="global-search" role="search"><Search aria-hidden="true" /><input ref={searchRef} aria-label="Search alerts or investigations" placeholder="Search alerts or investigations…" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && (event.nativeEvent.isComposing || event.keyCode === 229)) event.preventDefault(); }} /><kbd>⌘ K</kbd></form>
           <div className="env-badge"><span className="env-dot" />{appConfig.mocks ? "DEV · Mock data" : "LIVE API"}</div>
           <button className="icon-button theme-button" aria-label={dark ? "Switch to light mode" : "Switch to dark mode"} onClick={toggleTheme}>{dark ? <Sun /> : <Moon />}</button>
-          <div className="notification-wrap"><button className="icon-button notification-button" aria-label="Notifications" aria-expanded={notificationsOpen} aria-controls="notification-popover" onClick={() => setNotificationsOpen((value) => !value)}><Bell /><i /></button>{notificationsOpen && <div className="notifications-popover" id="notification-popover" role="region" aria-label="Notifications"><strong>Queue attention</strong><p>25 alerts are available for analyst review.</p><Link href="/alerts" onClick={() => setNotificationsOpen(false)}>Open alert queue</Link></div>}</div>
+          <div className="notification-wrap"><button className="icon-button notification-button" aria-label="Notifications" aria-expanded={notificationsOpen} aria-controls="notification-popover" onClick={() => setNotificationsOpen((value) => !value)}><Bell /><i /></button>{notificationsOpen && <div className="notifications-popover" id="notification-popover" role="region" aria-label="Notifications"><strong>Queue attention</strong><p>{alertTotal === undefined ? "Alert count unavailable." : `${alertTotal} alert${alertTotal === 1 ? " is" : "s are"} available for analyst review.`}</p><Link href="/alerts" onClick={() => setNotificationsOpen(false)}>Open alert queue</Link></div>}</div>
           <div className="user-menu-wrap"><button className="user-menu" aria-expanded={userOpen} onClick={() => setUserOpen(!userOpen)}><span className="user-avatar">JM</span><span className="user-name">Jordan Miller<small>Demo Analyst</small></span><ChevronRight className="user-chevron" /></button>{userOpen && <div className="user-popover"><strong>Jordan Miller</strong><span>Analyst ID: ANL-2048</span><button onClick={() => { router.push("/settings"); setUserOpen(false); }}>Account settings</button></div>}</div>
         </div>
       </header>

@@ -46,7 +46,9 @@ export const api = {
       return { dataset_id: `DATA-2026-${Date.now().toString().slice(-6)}`, accepted_count: rows - rejected, rejected_count: rejected, alerts_created: Math.round((rows - rejected) * 0.12), rejection_reasons: visibleReasons, rejection_reasons_truncated: rejected > visibleReasons.length };
     }
     const form = new FormData(); form.append("file", file);
-    return request<UploadResult>(`${apiBase}/upload-transactions`, { method: "POST", body: form });
+    // The backend reports counts as accepted/rejected and rejections as {source_row, reasons[]}.
+    const raw = await request<{ dataset_id: string; accepted: number; rejected: number; alerts_created: number; rejection_reasons: { source_row: number; reasons: string[] }[]; rejection_reasons_truncated: boolean }>(`${apiBase}/upload-transactions`, { method: "POST", body: form });
+    return { dataset_id: raw.dataset_id, accepted_count: raw.accepted, rejected_count: raw.rejected, alerts_created: raw.alerts_created, rejection_reasons: raw.rejection_reasons.map((item) => ({ row_number: item.source_row, reason: item.reasons.join("; ") })), rejection_reasons_truncated: raw.rejection_reasons_truncated };
   },
   async getAccountHistory(token: string, limit = 100): Promise<Transaction[]> {
     if (mockMode()) { await wait(); return mockTransactions.slice(0, limit).map((row, index) => ({ ...row, sender_token: index % 2 ? token : row.sender_token, receiver_token: index % 2 ? row.receiver_token : token })); }
@@ -54,9 +56,7 @@ export const api = {
   },
   async investigateAlert(alertId: string): Promise<{ investigation_id: string; status: "PENDING_AGENT" }> {
     if (mockMode()) { await wait(450); const found = investigations.find((item) => item.alert_id === alertId); if (found && found.execution_status === "running") { const err = new Error("An investigation is already running for this alert.") as Error & { status: number }; err.status = 409; throw err; } const id = `INV-2026-${String(319 + nextInvestigation++).padStart(5, "0")}`; investigations.unshift({ investigation_id: id, alert_id: alertId, status: "PENDING_AGENT", execution_status: "running", verification: { passed: false, errors: [], warnings: [] }, created_at: new Date().toISOString() }); auditEvents[id] = [{ event_id: `EVT-${id.slice(-5)}-01`, action: "CREATED", details: { alert_id: alertId, actor: "analyst-ui" }, created_at: new Date().toISOString() }, { event_id: `EVT-${id.slice(-5)}-02`, action: "AGENT_RUN_REQUESTED", details: { actor: "analyst-ui" }, created_at: new Date().toISOString() }]; return { investigation_id: id, status: "PENDING_AGENT" }; }
-    const result = await request<{ investigation_id: string; status: "PENDING_AGENT" }>(`${apiBase}/investigate/${encodeURIComponent(alertId)}`, { method: "POST" });
-    if (!investigations.some((item) => item.investigation_id === result.investigation_id)) investigations.unshift({ investigation_id: result.investigation_id, alert_id: alertId, status: result.status, execution_status: "running", verification: { passed: false, errors: [], warnings: [] }, created_at: new Date().toISOString() });
-    return result;
+    return request<{ investigation_id: string; status: "PENDING_AGENT" }>(`${apiBase}/investigate/${encodeURIComponent(alertId)}`, { method: "POST" });
   },
   async runInvestigation(investigationId: string): Promise<ReportResponse> {
     if (mockMode()) {
@@ -73,11 +73,10 @@ export const api = {
       auditEvents[investigationId]?.push({ event_id: `EVT-${investigationId.slice(-5)}-03`, action: "AGENT_RUN_FINISHED", details: { execution_status: "completed" }, created_at: new Date().toISOString() });
       return result;
     }
-    const result = await request<ReportResponse>(`${apiBase}/investigations/${encodeURIComponent(investigationId)}/run`, { method: "POST" });
-    const summary = investigations.find((item) => item.investigation_id === investigationId);
-    const status = result.execution_status === "completed" ? "COMPLETED" : result.execution_status === "incomplete" ? "INCOMPLETE" : result.execution_status === "failed" ? "FAILED" : "RUNNING";
-    if (summary) { summary.execution_status = result.execution_status; summary.status = status; summary.verification = result.verification; }
-    return result;
+    // /run returns only a status summary; the report itself is read back from /report.
+    const run = await request<{ execution_status: ReportResponse["execution_status"]; report_available: boolean }>(`${apiBase}/investigations/${encodeURIComponent(investigationId)}/run`, { method: "POST" });
+    if (!run.report_available) throw new Error(`Investigation ${run.execution_status}; no report was produced.`);
+    return request<ReportResponse>(`${apiBase}/investigations/${encodeURIComponent(investigationId)}/report`);
   },
   async getInvestigation(investigationId: string): Promise<InvestigationSummary> {
     if (mockMode()) { await wait(); const item = investigations.find((row) => row.investigation_id === investigationId); if (!item) throw new Error("Investigation not found."); return { ...item, verification: { ...item.verification, errors: [...item.verification.errors], warnings: [...item.verification.warnings] }, decision: item.decision ? { ...item.decision } : null }; }
@@ -93,19 +92,16 @@ export const api = {
       if (!summary || !alert) throw new Error("Investigation report not found.");
       const variant = summary.execution_status === "failed" ? "failed" : summary.execution_status === "incomplete" ? "incomplete" : "verified";
       const template = reportResponses[0];
-      return { ...template, investigation_id: investigationId, label: summary.execution_status === "running" ? "Agent run in progress" : template.label, report: createMockReport(investigationId, alert, variant), execution_status: summary.execution_status, verification: summary.verification };
+      return { ...template, investigation_id: investigationId, label: summary.execution_status === "running" ? "Agent run in progress" : template.label, report: createMockReport(investigationId, alert, variant), execution_status: summary.execution_status === "pending" ? "running" : summary.execution_status, verification: summary.verification };
     }
     return request<ReportResponse>(`${apiBase}/investigations/${encodeURIComponent(investigationId)}/report`);
   },
   async submitDecision(investigationId: string, decision: Decision): Promise<Decision> {
     if (mockMode()) { await wait(400); const summary = investigations.find((row) => row.investigation_id === investigationId); if (!summary) throw new Error("Investigation not found."); if (summary.decision) { const err = new Error("A human decision has already been recorded for this investigation.") as Error & { status: number }; err.status = 409; throw err; } if (decision.decision === "APPROVE" && (summary.execution_status !== "completed" || !summary.verification.passed)) throw new Error("Approval requires a completed, verified report."); summary.decision = { ...decision, created_at: new Date().toISOString() }; summary.status = decision.decision; auditEvents[investigationId]?.push({ event_id: `EVT-${investigationId.slice(-5)}-${String((auditEvents[investigationId]?.length ?? 0) + 1).padStart(2, "0")}`, action: "DECISION_RECORDED", details: { decision: decision.decision, analyst_id: decision.analyst_id, rationale: decision.rationale }, created_at: summary.decision.created_at }); return summary.decision; }
-    const saved = await request<Decision>(`${apiBase}/investigations/${encodeURIComponent(investigationId)}/decision`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision: decision.decision, rationale: decision.rationale, analyst_id: decision.analyst_id }) });
-    const summary = investigations.find((row) => row.investigation_id === investigationId);
-    if (summary) { summary.decision = saved; summary.status = saved.decision; }
-    return saved;
+    return request<Decision>(`${apiBase}/investigations/${encodeURIComponent(investigationId)}/decision`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision: decision.decision, rationale: decision.rationale, analyst_id: decision.analyst_id }) });
   },
-  // TODO: Replace this in-memory list with a backend investigations-list endpoint when one is available.
-  async getInvestigations(): Promise<InvestigationSummary[]> {
+  async getInvestigations(limit = 200): Promise<InvestigationSummary[]> {
+    if (!mockMode()) return request<InvestigationSummary[]>(`${apiBase}/investigations?limit=${Math.min(200, Math.max(1, Math.trunc(limit)))}`);
     await wait();
     return investigations.map((item) => ({ ...item, verification: { ...item.verification, errors: [...item.verification.errors], warnings: [...item.verification.warnings] }, decision: item.decision ? { ...item.decision } : null }));
   },

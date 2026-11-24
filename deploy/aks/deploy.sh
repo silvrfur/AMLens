@@ -110,6 +110,10 @@ done
 say "3/7 cert-manager"
 kubectl apply -f "https://github.com/cert-manager/cert-manager/releases/download/$CERT_MANAGER_VERSION/cert-manager.yaml" >/dev/null
 kubectl -n cert-manager wait --for=condition=Available deploy --all --timeout=300s
+# The app-routing add-on's default NGINX controller is unused (AMLens has its own, with the
+# DNS label); keep it at one replica so it doesn't reserve a full vCPU on the small nodes.
+kubectl patch nginxingresscontroller default --type merge \
+  -p '{"spec":{"scaling":{"minReplicas":1,"maxReplicas":2,"threshold":"steady"}}}' >/dev/null
 
 # ------------------------------------------------------------------ 4. sign-in (Entra ID app)
 say "4/7 Entra ID sign-in app"

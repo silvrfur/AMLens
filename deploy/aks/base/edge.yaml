@@ -11,6 +11,8 @@ metadata:
 spec:
   ingressClassName: amlens-nginx
   controllerNamePrefix: amlens-nginx
+  # Each controller replica reserves 0.5 vCPU; the default of 2 does not fit two B2s nodes.
+  scaling: { minReplicas: 1, maxReplicas: 2, threshold: steady }
   loadBalancerAnnotations:
     service.beta.kubernetes.io/azure-dns-label-name: __DNSLABEL__
 ---

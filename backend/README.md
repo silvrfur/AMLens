@@ -7,7 +7,7 @@ This is a **development MVP starter**, not a production-ready AML platform. It w
 | Data | Store | Owner |
 |---|---|---|
 | Transactions, alerts, investigations, decisions, audit history | **PostgreSQL** (`DATABASE_URL`) | this backend |
-| Agent runtime (AI reports, agent runs, tool calls) | SQLite `agent_runtime.db` | `agents` package (member3-agents), unchanged |
+| Agent runtime (AI reports, agent runs, tool calls) | SQLite `agent_runtime.db` (git-ignored, created on first run) | `agents` package |
 
 The agents read the main data only through `app/integrations/team_backend.py`
 (`get_alert_context` → `AlertBundle`), inside PostgreSQL `READ ONLY` transactions.
@@ -15,6 +15,9 @@ Tables are created/changed only by **Alembic** migrations (`alembic/versions/`);
 the app refuses to start against an un-migrated database.
 
 ## Setup from scratch (Windows PowerShell, Docker)
+
+> To run the whole stack (backend + agents + RAG + frontend), follow the root
+> `README.md`. The steps below set up and test this backend on its own.
 
 You need **Docker Desktop**, **Python 3.11+** and **Git**. No PostgreSQL install and no
 database admin password are needed - Docker provides a ready-made database.
@@ -25,7 +28,7 @@ Commands assume PowerShell; macOS/Linux equivalents are in comments.
 ```powershell
 git clone https://github.com/silvrfur/AMLens.git
 cd AMLens
-git checkout feature/postgres-migration   # or the branch it was merged into
+git checkout integration
 cd backend
 ```
 
@@ -63,8 +66,7 @@ The defaults already point at the Docker database. You only need to set:
 - `TOKEN_SECRET` - **ask the team for the shared value** (shared privately, never in git).
   Everyone must use the same one, otherwise the same bank account gets a different token
   on each machine. To create the very first one: `python -c "import secrets; print(secrets.token_hex(32))"`.
-- Optional: `AML_AGENT_DATABASE_PATH=./agent_runtime_check.db`, so local agent runs don't modify
-  the committed `agent_runtime.db`.
+- For live AI and guidance instead of the mocks, see the settings table in the root `README.md`.
 
 `.env` is git-ignored. Use `127.0.0.1` rather than `localhost` in database URLs: on Windows
 `localhost` may try IPv6 first, which Docker doesn't listen on, causing long stalls.
@@ -84,21 +86,20 @@ python scripts/check_alerts.py                 # expect 46/47 OK (one legacy ale
 
 The copy runs in one transaction, keeps all IDs, refuses a non-empty target and verifies row counts.
 
-### 6. Get the agents code (needed for tests and AI runs)
+### 6. Make the agents package importable (needed for tests and AI runs)
 
-The backend imports the `agents` package from the `member3-agents` branch. Until that is merged,
-check it out next to the repo (your own branch is not affected):
+The backend imports the `agents` package from the `agents/` folder at the repository root.
+From `backend/`:
 
 ```powershell
-git fetch origin
-git worktree add ..\..\agents-branch origin/member3-agents
-$env:PYTHONPATH = (Resolve-Path ..\..\agents-branch).Path    # repeat in every new terminal
+pip install -r ..\agents\requirements.txt
+$env:PYTHONPATH = (Resolve-Path ..).Path    # repeat in every new terminal
 ```
 
 ### 7. Run the tests
 
 ```powershell
-pytest -q                            # expect: 15 passed
+pytest -q                            # expect: 17 passed
 ```
 
 `TEST_DATABASE_URL` comes from `.env`. Database tests are skipped without it, API/adapter tests are
@@ -123,7 +124,7 @@ For the frontend, add `AML_CORS_ORIGINS=http://localhost:3000` to `.env`.
 cd backend
 docker compose up -d                 # start the database (data is kept)
 .venv\Scripts\Activate.ps1
-$env:PYTHONPATH = (Resolve-Path ..\..\agents-branch).Path
+$env:PYTHONPATH = (Resolve-Path ..).Path
 uvicorn app.main:app --reload
 docker compose stop                  # when done
 ```

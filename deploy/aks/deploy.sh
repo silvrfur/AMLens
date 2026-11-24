@@ -12,6 +12,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; cd "$ROOT"
+# The Windows Azure CLI crashes streaming `az acr build` logs on a cp1252 console.
+export PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+# On Windows the Azure CLI ends every output line with \r; strip it so values captured with
+# $(az ...) (keys, IDs, URLs) are clean. pipefail keeps az's own exit status.
+az() { command az "$@" | tr -d '\r'; }
 RG="${RG:-tpl-azure-aks--mazeazusrqn9-ongz-sbx}"
 LOC="${LOC:-southindia}"
 SUF="$(printf %s "$RG" | md5sum | cut -c1-6)"
@@ -24,7 +29,7 @@ NODE_SIZE="${NODE_SIZE:-Standard_B2s}"
 NODES="${NODES:-2}"
 CERT_MANAGER_VERSION="v1.16.2"
 TAG="${TAG:-$(git rev-parse --short HEAD)}"
-[ -z "$(git status --porcelain)" ] || TAG="$TAG-dirty$(date +%m%d%H%M)"
+[ -z "$(git status --porcelain --untracked-files=no)" ] || TAG="$TAG-dirty$(date +%m%d%H%M)"
 export KUBECONFIG="$ROOT/deploy/aks/.kubeconfig"      # never touches ~/.kube/config
 KUBECTL_DIR="$HOME/.azure-kubectl"; export PATH="$KUBECTL_DIR:$PATH"
 BUILD="$ROOT/deploy/aks/.build"; rm -rf "$BUILD"; mkdir -p "$BUILD"
@@ -40,7 +45,15 @@ TOKEN_SECRET="${AMLENS_TOKEN_SECRET:-$(dotenv backend/.env TOKEN_SECRET)}"
 [ "${#TOKEN_SECRET}" -ge 32 ] || { echo "TOKEN_SECRET (team value, >=32 chars) not found"; exit 1; }
 [ "${SEED:-0}" != 1 ] || [ -f infra/seed/seed.sql ] || { echo "Run: bash infra/seed/make-seed.sh"; exit 1; }
 TENANT="$(az account show --query tenantId -o tsv)"
-OPENAI="$(az cognitiveservices account list -g "$RG" --query "[?kind=='AIServices' || kind=='OpenAI'] | [0].name" -o tsv)"
+CHAT_DEPLOYMENT="${CHAT_DEPLOYMENT:-gpt-4.1-mini}"
+# The Azure OpenAI / AI Services account that actually hosts the chat deployment.
+OPENAI="${OPENAI:-}"
+if [ -z "$OPENAI" ]; then
+  for a in $(az cognitiveservices account list -g "$RG" --query "[?kind=='AIServices' || kind=='OpenAI'].name" -o tsv | tr -d '\r'); do
+    az cognitiveservices account deployment show -g "$RG" -n "$a" --deployment-name "$CHAT_DEPLOYMENT" -o none 2>/dev/null && { OPENAI="$a"; break; }
+  done
+fi
+[ -n "$OPENAI" ] || { echo "No Azure OpenAI account in $RG has a '$CHAT_DEPLOYMENT' deployment"; exit 1; }
 OPENAI_ENDPOINT="https://$OPENAI.openai.azure.com/"
 SEARCH="$(az search service list -g "$RG" --query "[0].name" -o tsv)"
 echo "image tag $TAG | host https://$HOST | openai $OPENAI | search $SEARCH"

@@ -1,10 +1,11 @@
 # Tests every pull request and push; on main, builds the images in Azure Container Registry
-# and rolls them out: migrations, then RAG, then the backend, then the frontend.
+# and rolls them out to AKS: migrations, then RAG, then the backend, then the frontend
+# (deploy/aks/rollout.sh). Infrastructure and secrets are set up once by deploy/aks/deploy.sh.
 #
-# One-time setup (DEPLOY.md, "CI/CD"): provision with infra/deploy.ps1, create an Entra ID app with
-# a federated credential for this repo's `production` environment, give it Contributor on the
-# resource group, and set these repository variables (not secrets; OIDC needs no stored password):
-#   AZURE_CLIENT_ID  AZURE_TENANT_ID  AZURE_SUBSCRIPTION_ID  AZURE_RESOURCE_GROUP  AZURE_ACR_NAME
+# One-time setup (DEPLOY.md, "CI/CD"): create an Entra ID app with a federated credential for
+# this repo's `production` environment, give it Contributor on the resource group, and set these
+# repository variables (not secrets; OIDC needs no stored password):
+#   AZURE_CLIENT_ID  AZURE_TENANT_ID  AZURE_SUBSCRIPTION_ID  AZURE_RESOURCE_GROUP
 name: CI/CD
 
 on:
@@ -95,10 +96,6 @@ jobs:
     permissions:
       contents: read
       id-token: write                       # OIDC sign-in to Azure, no stored credentials
-    env:
-      RG: ${{ vars.AZURE_RESOURCE_GROUP }}
-      ACR: ${{ vars.AZURE_ACR_NAME }}
-      TAG: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
 
@@ -108,46 +105,10 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Build images in ACR
-        run: |
-          az acr build -r "$ACR" -t "amlens-rag:$TAG" RAG -o none
-          az acr build -r "$ACR" -t "amlens-backend:$TAG" -f backend/Dockerfile . -o none
-          az acr build -r "$ACR" -t "amlens-frontend:$TAG" frontend -o none
+      - uses: azure/setup-kubectl@v4
 
-      - name: Run database migrations (inside the VNet)
-        run: |
-          IMG="$ACR.azurecr.io/amlens-backend:$TAG"
-          az containerapp job update -n amlens-migrate -g "$RG" --image "$IMG" -o none
-          EXEC=$(az containerapp job start -n amlens-migrate -g "$RG" --query name -o tsv)
-          for i in $(seq 1 90); do
-            STATUS=$(az containerapp job execution show -n amlens-migrate -g "$RG" --job-execution-name "$EXEC" --query properties.status -o tsv)
-            echo "migrate: $STATUS"
-            [ "$STATUS" = "Succeeded" ] && exit 0
-            [ "$STATUS" = "Failed" ] && exit 1
-            sleep 10
-          done
-          exit 1
-
-      - name: Roll out RAG, then backend, then frontend
-        run: |
-          for APP in rag backend frontend; do
-            az containerapp update -n "amlens-$APP" -g "$RG" --image "$ACR.azurecr.io/amlens-$APP:$TAG" -o none
-            REV=$(az containerapp show -n "amlens-$APP" -g "$RG" --query properties.latestRevisionName -o tsv)
-            for i in $(seq 1 30); do
-              STATE=$(az containerapp revision show -n "amlens-$APP" -g "$RG" --revision "$REV" --query properties.runningState -o tsv)
-              echo "$APP $REV: $STATE"
-              case "$STATE" in Running*) break;; Failed|Degraded) exit 1;; esac
-              sleep 10
-            done
-          done
-
-      - name: Smoke test through the public frontend
-        run: |
-          FQDN=$(az containerapp show -n amlens-frontend -g "$RG" --query properties.configuration.ingress.fqdn -o tsv)
-          for i in $(seq 1 18); do
-            H=$(curl -fsS "https://$FQDN/api/backend/health" || true)
-            echo "$H"
-            echo "$H" | jq -e '.backend=="healthy" and .agent=="healthy" and .rag=="healthy"' >/dev/null && exit 0
-            sleep 10
-          done
-          exit 1
+      - name: Build, migrate, roll out RAG -> backend -> frontend, smoke test
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          TAG: ${{ github.sha }}
+        run: bash deploy/aks/rollout.sh

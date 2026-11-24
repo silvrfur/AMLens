@@ -1,2 +1,3 @@
 .kubeconfig
 .build/
+.deploy.log

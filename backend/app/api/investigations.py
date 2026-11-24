@@ -4,7 +4,7 @@ Local MVP: synchronous, mocked-agent execution only. Never expose publicly witho
 identification, RBAC, rate limits, worker/queue integration and an audit review.
 """
 from uuid import uuid4
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.database.connection import get_db
@@ -13,6 +13,11 @@ from app.models.schemas import DecisionIn
 from app.services import agent_bridge
 
 router = APIRouter()
+
+# Alert statuses, as the frontend's alert queue filters and badges expect them.
+ALERT_OPEN = 'OPEN'
+ALERT_UNDER_REVIEW = 'UNDER REVIEW'
+ALERT_DECIDED = 'DECIDED'
 
 
 def _agent_record(investigation_id: str, persistence=None):
@@ -63,8 +68,13 @@ def list_investigations(limit: int = 50, offset: int = 0, db: Session = Depends(
 
 @router.post('/investigate/{alert_id}', status_code=201)
 def start_investigation(alert_id: str, db: Session = Depends(get_db)):
-    if not db.get(Alert, alert_id):
+    alert = db.get(Alert, alert_id)
+    if not alert:
         raise HTTPException(404, 'Alert not found')
+    # Alert lifecycle: OPEN -> UNDER REVIEW (investigation opened) -> DECIDED (human decision).
+    # Only moves forward: a new investigation never reopens a decided alert.
+    if alert.status == ALERT_OPEN:
+        alert.status = ALERT_UNDER_REVIEW
     inv = Investigation(id=str(uuid4()), alert_id=alert_id, status='PENDING_AGENT')
     db.add(inv)
     # Insert the parent row first: PostgreSQL enforces the audit_history ->
@@ -148,7 +158,9 @@ def get_report(id: str, db: Session = Depends(get_db)):
 
 
 @router.post('/investigations/{id}/decision')
-def decide(id: str, payload: DecisionIn, db: Session = Depends(get_db)):
+def decide(id: str, payload: DecisionIn, request: Request, db: Session = Depends(get_db)):
+    # Behind the authenticated proxy, record who is actually signed in, not what the browser sent.
+    analyst_id = getattr(request.state, 'user', None) or payload.analyst_id
     inv = db.get(Investigation, id)
     if not inv:
         raise HTTPException(404, 'Investigation not found')
@@ -161,11 +173,14 @@ def decide(id: str, payload: DecisionIn, db: Session = Depends(get_db)):
         raise HTTPException(409, 'A decision has already been recorded for this investigation')
     d = InvestigatorDecision(id=str(uuid4()), investigation_id=id,
                              decision=payload.decision, rationale=payload.rationale,
-                             analyst_id=payload.analyst_id)
+                             analyst_id=analyst_id)
     inv.status = payload.decision
+    alert = db.get(Alert, inv.alert_id)
+    if alert:
+        alert.status = ALERT_DECIDED
     db.add(d)
     db.add(AuditEvent(id=str(uuid4()), investigation_id=id, action='DECISION_RECORDED',
-                      details={'decision': payload.decision, 'analyst_id': payload.analyst_id,
+                      details={'decision': payload.decision, 'analyst_id': analyst_id,
                                'decision_id': d.id, 'rationale': payload.rationale}))
     db.commit()
     return {**_decision_out(d), 'investigation_id': id, 'status': inv.status}

@@ -42,9 +42,12 @@ cd frontend; npx pnpm install; cd ..
 |---|---|---|
 | `backend\.env` | `backend\.env.example` | `TOKEN_SECRET` (shared team value). Live AI: `USE_MOCK_LLM=false`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`, `AZURE_OPENAI_API_KEY`. Live guidance: `USE_MOCK_RAG=false`, `RAG_SERVICE_URL=http://127.0.0.1:8001`. Browser access: `AML_CORS_ORIGINS=http://localhost:3000` |
 | `RAG\.env` | `RAG\.env.example` | `RAG_BACKEND=azure`, the `AZURE_SEARCH_*` and `AZURE_OPENAI_*` values, `RAG_CORS_ORIGINS=http://localhost:3000` |
-| `frontend\.env.local` | (new file) | `NEXT_PUBLIC_USE_MOCKS=false`, `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000`, `NEXT_PUBLIC_RAG_BASE_URL=http://localhost:8001` |
+| `frontend\.env.local` | (new file) | `NEXT_PUBLIC_USE_MOCKS=false`, `AMLENS_BACKEND_URL=http://127.0.0.1:8000`, `AMLENS_RAG_URL=http://127.0.0.1:8001` |
 
 Without `frontend\.env.local` the frontend shows built-in mock data and calls no service.
+The browser calls the frontend's own `/api/backend/*` and `/api/rag/*` routes, which forward
+to `AMLENS_BACKEND_URL` / `AMLENS_RAG_URL` server-side (so no CORS settings are needed).
+Restart `pnpm dev` after changing `.env.local`.
 Ask the team for the Azure keys and `TOKEN_SECRET`; they are shared privately, never in git.
 
 Then create the tables and load the sample data (first time only):
@@ -98,5 +101,20 @@ cd frontend; npx tsc --noEmit; cd ..                        # frontend type-chec
 ```
 
 Backend tests always use the mock LLM and mock RAG, so they never call Azure.
+
+### Production-like run (Docker images)
+
+Builds the three deployable images and runs them wired as in Azure: only the frontend
+is published (http://localhost:3100); backend and RAG are reachable only by it, agent
+runs are stored in PostgreSQL, and the backend accepts only proxied calls.
+
+```powershell
+cd backend; docker compose up -d; cd ..    # the dev database holds the data
+docker compose up --build
+```
+
+## Deploying
+
+See `DEPLOY.md` (Azure Container Apps).
 
 See `backend/README.md` and `RAG/README.md` for details on each service.

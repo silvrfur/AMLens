@@ -1,0 +1,6 @@
+# Files that run inside Linux containers or bash must keep LF line endings,
+# even when checked out on Windows (core.autocrlf), or `sh` fails on '\r'.
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+*.bicep     text eol=lf
+*.yml       text eol=lf

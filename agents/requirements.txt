@@ -7,6 +7,7 @@ httpx>=0.28,<1
 langgraph>=1.0,<2
 openai>=1.60,<3
 pandas>=2.2,<3
+psycopg[binary]>=3.2,<4
 pydantic>=2.10,<3
 pydantic-settings>=2.7,<3
 pytest>=8.3,<10

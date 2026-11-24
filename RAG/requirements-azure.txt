@@ -1,0 +1,11 @@
+# Runtime dependencies for RAG_BACKEND=azure (the deployment image).
+# No sentence-transformers / torch / faiss: those are only needed for the local
+# FAISS backend and the index-building scripts (see requirements.txt).
+fastapi
+uvicorn
+pydantic>=2,<3
+python-dotenv
+azure-search-documents
+azure-core
+openai
+azure-identity

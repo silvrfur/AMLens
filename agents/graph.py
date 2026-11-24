@@ -10,6 +10,7 @@ from .agents.information_gap_agent import InformationGapAgent
 from .agents.report_agent import ReportAgent
 from .verifier.report_verifier import ReportVerifier
 from .services.audit_service import ToolBudget, current_budget, audit
+from .services.timeutil import utcnow
 
 class InvestigationFailed(RuntimeError): pass
 
@@ -19,8 +20,9 @@ def build_graph(backend, rag, llm, persistence):
         def node(state):
             run_id = str(uuid4())
             with db.connect() as c:
-                c.execute("INSERT INTO agent_runs VALUES (?,?,?,'running',datetime('now'),NULL,NULL)",
-                          (run_id, state['investigation_id'], name))
+                c.execute("""INSERT INTO agent_runs (run_id,investigation_id,agent_name,execution_status,started_at,
+                    completed_at,error_message) VALUES (?,?,?,'running',?,NULL,NULL)""",
+                          (run_id, state['investigation_id'], name, utcnow()))
             budget = current_budget.get()
             if budget: budget.run_id = run_id
             error = None
@@ -38,8 +40,8 @@ def build_graph(backend, rag, llm, persistence):
             if name == 'correction': update['retry_count'] = 1
             status = 'failed' if error else 'completed'
             with db.connect() as c:
-                c.execute("UPDATE agent_runs SET execution_status=?,completed_at=datetime('now'),error_message=? WHERE run_id=?",
-                          (status, error, run_id))
+                c.execute("UPDATE agent_runs SET execution_status=?,completed_at=?,error_message=? WHERE run_id=?",
+                          (status, utcnow(), error, run_id))
             event = {'agent': name, 'status': status, 'error': error}
             update['agent_execution_trace'] = state.get('agent_execution_trace', []) + [event]
             if error: update['errors'] = state.get('errors', []) + [f'{name}: {error}']

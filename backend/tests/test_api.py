@@ -75,6 +75,27 @@ def test_upload_and_alert_and_investigation(client):
         'CREATED', 'AGENT_RUN_REQUESTED', 'AGENT_RUN_FINISHED', 'DECISION_RECORDED']
 
 
+def test_alert_status_follows_case_lifecycle(client):
+    assert _upload(client).status_code == 200
+    alert_id = client.get('/alerts').json()['items'][0]['id']
+    status = lambda: client.get('/alerts/' + alert_id).json()['status']
+    assert status() == 'OPEN'
+
+    iid = client.post('/investigate/' + alert_id).json()['investigation_id']
+    assert status() == 'UNDER REVIEW'                    # case opened
+
+    assert client.post(f'/investigations/{iid}/run').status_code == 200
+    assert status() == 'UNDER REVIEW'                    # AI draft is not a decision
+
+    assert client.post(f'/investigations/{iid}/decision', json={
+        'decision': 'REJECT', 'rationale': 'Known counterparty, documented purpose.',
+        'analyst_id': 'test-analyst'}).status_code == 200
+    assert status() == 'DECIDED'                         # human decision closes it
+
+    client.post('/investigate/' + alert_id)              # a later case never reopens it
+    assert status() == 'DECIDED'
+
+
 def test_duplicate_upload_rejected(client):
     assert _upload(client).status_code == 200
     again = _upload(client)

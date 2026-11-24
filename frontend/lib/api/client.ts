@@ -3,8 +3,10 @@ import type { Alert, AlertPage, AuditEvent, Decision, Guideline, HealthStatus, I
 import { auditEvents, createMockReport, investigations, mockAlerts, mockGuidelines, mockHealth, mockTransactions, reportResponses } from "@/lib/mocks/data";
 
 const mockMode = () => process.env.NEXT_PUBLIC_USE_MOCKS !== "false";
-const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
-const ragBase = (process.env.NEXT_PUBLIC_RAG_BASE_URL ?? "http://localhost:8001").replace(/\/$/, "");
+// Default: the same-origin proxy (app/api/[service]/[...path]/route.ts), which reads the
+// real service URLs at runtime. Set NEXT_PUBLIC_*_BASE_URL only to call a service directly.
+const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL || "/api/backend").replace(/\/$/, "");
+const ragBase = (process.env.NEXT_PUBLIC_RAG_BASE_URL || "/api/rag").replace(/\/$/, "");
 const wait = (ms = 250) => new Promise((resolve) => setTimeout(resolve, ms));
 let nextInvestigation = 0;
 

@@ -7,6 +7,7 @@ from app.database.connection import engine
 from app.database import tables  # noqa: F401; registers ORM models
 from app.database.schema_check import assert_schema_current
 from app.api import upload, alerts, transactions, investigations, health
+from app.security import require_proxy
 
 
 @asynccontextmanager
@@ -18,6 +19,10 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title='AML Member 1 Backend (MVP)', version='0.3.0', lifespan=lifespan)
+
+# Proxy check (see app/security.py). Registered before CORS, so CORS is the outer
+# layer and a 401 still carries CORS headers for local cross-origin development.
+app.middleware('http')(require_proxy)
 
 # Allow only explicitly configured local frontend origins. Never use '*'.
 allowed_origins = [origin.strip() for origin in os.getenv('AML_CORS_ORIGINS', '').split(',') if origin.strip()]

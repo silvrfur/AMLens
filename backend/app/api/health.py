@@ -40,7 +40,7 @@ def _rag() -> str:
     if not url:
         return 'offline'
     try:
-        return 'healthy' if httpx.get(url + '/', timeout=2).status_code == 200 else 'offline'
+        return 'healthy' if httpx.get(url + '/health', timeout=2).status_code == 200 else 'offline'
     except httpx.HTTPError:
         return 'offline'
 

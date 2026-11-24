@@ -8,13 +8,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-# AMLens imports
-from app.rag_pipeline import AMLRAGPipeline
-from app.team_faiss_adapter import (
-    TeamFAISSAdapter,
-    RetrievalResult
-)
-from app.azure_search_adapter import TeamAzureSearchAdapter
+# AMLens imports. The FAISS pipeline (sentence-transformers, torch) is imported
+# only when it is needed, so the Azure deployment image can leave it out.
+from app.models import RetrievalResult
 
 
 # ==========================================
@@ -52,22 +48,26 @@ if allowed_origins:
 
 
 # ==========================================
-# 3. Initialize local RAG pipeline
+# 3. Local RAG pipeline (FAISS), created on first use
 # ==========================================
 
-print("\nInitializing AMLens RAG...")
+_pipeline = None
 
-pipeline = AMLRAGPipeline()
 
-# Local FAISS adapter
-faiss_adapter = TeamFAISSAdapter(
-    retriever=pipeline.retriever
-)
+def get_pipeline():
+    """Load the local embedding model and FAISS index (slow; needs the full requirements)."""
+    global _pipeline
+    if _pipeline is None:
+        from app.rag_pipeline import AMLRAGPipeline
+        _pipeline = AMLRAGPipeline()
+    return _pipeline
 
 
 # ==========================================
 # 4. Select retrieval backend
 # ==========================================
+
+print("\nInitializing AMLens RAG...")
 
 RAG_BACKEND = os.getenv(
     "RAG_BACKEND", "faiss"
@@ -82,6 +82,8 @@ if RAG_BACKEND == "azure":
 
     print("Initializing Azure AI Search adapter...")
 
+    from app.azure_search_adapter import TeamAzureSearchAdapter
+
     search_adapter = TeamAzureSearchAdapter()
 
     print("Azure AI Search adapter initialized!")
@@ -90,7 +92,11 @@ else:
 
     print("Using local FAISS adapter...")
 
-    search_adapter = faiss_adapter
+    from app.team_faiss_adapter import TeamFAISSAdapter
+
+    search_adapter = TeamFAISSAdapter(
+        retriever=get_pipeline().retriever
+    )
 
 print(f"\nAMLens active search backend: {RAG_BACKEND}")
 
@@ -148,12 +154,34 @@ def home():
     }
 
 
+@app.get("/health")
+def health():
+    """Liveness/readiness probe. The search backend is set up at import time, so a
+    running process is ready; no external service is called per probe."""
+
+    return {
+        "status": "healthy",
+        "search_backend": RAG_BACKEND
+    }
+
+
 # ==========================================
 # 7. Existing local RAG retrieval endpoint
 # ==========================================
 
 @app.post("/retrieve")
 def retrieve_aml_knowledge(request: AMLQuery):
+
+    try:
+        pipeline = get_pipeline()
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "/retrieve needs the local FAISS pipeline, which this "
+                "deployment does not install; use /search"
+            )
+        )
 
     try:
 

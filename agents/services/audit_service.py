@@ -4,6 +4,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from uuid import uuid4
 from .security import ALLOWED_TOOLS
+from .timeutil import utcnow
 
 log = logging.getLogger("traceiq")
 current_budget: ContextVar = ContextVar("budget", default=None)
@@ -27,8 +28,8 @@ class ToolBudget:
         self.calls += 1
         if self.run_id:
             with self.db.connect() as c:
-                c.execute("INSERT INTO tool_calls VALUES (?,?,?,?,?,datetime('now'))",
-                          (str(uuid4()), self.run_id, tool_name, '{}', '{"status":"attempted"}'))
+                c.execute("INSERT INTO tool_calls (call_id,run_id,tool_name,input_json,output_json,created_at) VALUES (?,?,?,?,?,?)",
+                          (str(uuid4()), self.run_id, tool_name, '{}', '{"status":"attempted"}', utcnow()))
         log.info(json.dumps({"event": "tool_attempt", "tool": tool_name,
                              "investigation_id": self.investigation_id, "count": self.calls}))
 
@@ -39,6 +40,6 @@ def consume(tool_name):
 
 def audit(db, investigation_id, event_type, details):
     with db.connect() as c:
-        c.execute("INSERT INTO audit_log VALUES (?,?,?,?,datetime('now'),?)",
-                  (str(uuid4()), investigation_id, event_type, "agent_workflow", json.dumps(details)))
+        c.execute("INSERT INTO audit_log (event_id,investigation_id,event_type,actor,timestamp,details_json) VALUES (?,?,?,?,?,?)",
+                  (str(uuid4()), investigation_id, event_type, "agent_workflow", utcnow(), json.dumps(details)))
     log.info(json.dumps({"event": event_type, "investigation_id": investigation_id, **details}))

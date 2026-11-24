@@ -27,5 +27,5 @@ class Settings(BaseSettings):
     @property
     def database_path(self) -> Path:
         if not self.database_url.startswith("sqlite:///"):
-            raise ValueError("Only sqlite:/// database URLs are supported")
+            raise ValueError("database_path applies only to sqlite:/// URLs (PostgreSQL URLs use PostgresService)")
         return Path(self.database_url.removeprefix("sqlite:///"))

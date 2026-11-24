@@ -1,7 +1,8 @@
 # Deploying the AML database to Azure
 
 Target: **Azure Database for PostgreSQL - Flexible Server** (managed PostgreSQL 16).
-Only the main AML data moves here. The agents' `agent_runtime.db` stays SQLite.
+The main AML data moves here; in a deployment the agents also store their runs here
+(schema `agent_runtime`, via `AML_AGENT_DATABASE_URL`). For the whole stack see `../DEPLOY.md`.
 
 > Creating these resources **costs money** (Burstable B1ms is roughly US$13-15/month,
 > or free for 12 months on an Azure free account: 750 h of B1ms + 32 GB storage).
@@ -68,23 +69,11 @@ az keyvault secret set --vault-name $KV --name token-secret --value (python -c "
 
 Use the **same** `TOKEN_SECRET` as the one that produced your existing data, or old and new account tokens won't match.
 
-## 4. Run the backend in Azure (when ready)
+## 4. Run the backend in Azure
 
-Azure Container Apps runs the existing `backend/Dockerfile` (it runs `alembic upgrade head` on start).
-The image must also contain the `agents` package (see note in the Dockerfile).
-
-```powershell
-az containerapp up --name amlens-backend --resource-group $RG --location $LOCATION `
-  --source . --ingress external --target-port 8000 `
-  --env-vars AML_SOURCE_TIMEZONE=UTC
-```
-
-Then give the app its secrets (`DATABASE_URL`, `TOKEN_SECRET`) from Key Vault (Container App →
-Settings → Secrets → "Key Vault reference", using the app's managed identity), and let the app reach
-the database: either `az postgres flexible-server firewall-rule create ... --start-ip-address 0.0.0.0 --end-ip-address 0.0.0.0`
-(allows Azure services) or, better for production, private networking (VNet integration).
-
-Remember the backend has **no authentication yet** - don't give it public ingress with real data.
+See `../DEPLOY.md`: the backend image is built from the repository root
+(`az acr build -f backend/Dockerfile .`) because it contains the `agents` package, and it
+runs on Azure Container Apps with internal ingress behind the frontend.
 
 ## 5. Production hardening (later)
 

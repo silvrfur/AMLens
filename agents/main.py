@@ -38,9 +38,17 @@ def create_llm(settings):
         return GroqLLM(settings.groq_api_key, settings.groq_model, settings.llm_timeout_seconds)
     raise ValueError(f'Unsupported LLM provider: {settings.llm_provider}')
 
+def create_store(settings):
+    """Agent runtime store: PostgreSQL for deployments, SQLite for local runs and tests."""
+    if settings.database_url.startswith(('postgresql://', 'postgresql+psycopg://', 'postgres://')):
+        # Imported lazily so SQLite-only installs don't need psycopg.
+        from .services.postgres_service import PostgresService
+        return PostgresService(settings.database_url)
+    return SQLiteService(settings.database_path)
+
 def create_services(settings=None, *, backend=None, rag=None, llm=None, bus=None):
     settings = settings or Settings()
-    db = SQLiteService(settings.database_path)
+    db = create_store(settings)
     persistence = Persistence(db, settings.lease_seconds)
     backend = backend or (MockBackendClient(db) if settings.use_mock_backend else SQLiteBackendClient(db))
     if rag is None:

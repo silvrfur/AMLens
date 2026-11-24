@@ -29,6 +29,9 @@ CREATE INDEX IF NOT EXISTS runs_investigation ON agent_runs(investigation_id);
 """
 
 class SQLiteService:
+    # Column that preserves insertion order.
+    order_column = "rowid"
+
     def __init__(self, path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -39,6 +42,10 @@ class SQLiteService:
     def connect(self):
         # Context manager below both commits/rolls back AND closes connections.
         return Connection(self.path)
+
+    def begin_write(self, c, lock_key=None):
+        """Take SQLite's write lock up front so concurrent claims cannot interleave."""
+        c.execute("BEGIN IMMEDIATE")
 
 class Connection:
     def __init__(self, path): self.path = path

@@ -8,7 +8,7 @@ from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 from azure.search.documents.models import VectorizedQuery
 
-from app.team_faiss_adapter import Guideline, RetrievalResult
+from app.models import Guideline, RetrievalResult
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -19,9 +19,29 @@ class TeamAzureSearchAdapter:
 
     def __init__(self):
 
+        # Keys are optional: when AZURE_OPENAI_API_KEY / AZURE_SEARCH_ADMIN_KEY are
+        # unset, Microsoft Entra ID is used (managed identity in Azure; set
+        # AZURE_CLIENT_ID for a user-assigned one, `az login` locally). The identity
+        # needs "Cognitive Services OpenAI User" and "Search Index Data Reader".
+        openai_key = os.getenv("AZURE_OPENAI_API_KEY", "").strip()
+        search_key = os.getenv("AZURE_SEARCH_ADMIN_KEY", "").strip()
+        credential = None
+        if not openai_key or not search_key:
+            from azure.identity import DefaultAzureCredential
+            credential = DefaultAzureCredential()
+
+        if openai_key:
+            openai_auth = openai_key
+        else:
+            from azure.identity import get_bearer_token_provider
+            # The OpenAI client accepts a bearer-token callable as api_key.
+            openai_auth = get_bearer_token_provider(
+                credential, "https://cognitiveservices.azure.com/.default"
+            )
+
         self.openai_client = OpenAI(
             base_url=os.environ["AZURE_OPENAI_BASE_URL"],
-            api_key=os.environ["AZURE_OPENAI_API_KEY"],
+            api_key=openai_auth,
             timeout=60.0,
             max_retries=0
         )
@@ -29,8 +49,8 @@ class TeamAzureSearchAdapter:
         self.search_client = SearchClient(
             endpoint=os.environ["AZURE_SEARCH_ENDPOINT"],
             index_name=os.environ["AZURE_SEARCH_INDEX_NAME"],
-            credential=AzureKeyCredential(
-                os.environ["AZURE_SEARCH_ADMIN_KEY"]
+            credential=(
+                AzureKeyCredential(search_key) if search_key else credential
             ),
             retry_total=0
         )

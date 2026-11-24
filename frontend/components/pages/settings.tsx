@@ -12,7 +12,7 @@ const services: { key: keyof HealthStatus; label: string; description: string }[
   { key: "backend", label: "API backend", description: "FastAPI health and alert endpoints" },
   { key: "agent", label: "Investigation agent", description: "Agent execution and report generation" },
   { key: "rag", label: "AML knowledge retrieval", description: "Vector search service and indexed guidance" },
-  { key: "queue", label: "Task queue", description: "Background execution capacity" },
+  { key: "queue", label: "Task queue", description: "Runs execute in-process; no background queue is configured" },
 ];
 
 export function SettingsPage() {

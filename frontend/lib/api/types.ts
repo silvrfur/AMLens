@@ -23,7 +23,7 @@ export interface Decision { decision: "APPROVE" | "REJECT" | "ESCALATE"; rationa
 export interface Transaction { transaction_id: string; timestamp: string; sender_token: string; receiver_token: string; amount_paid: string; payment_currency: string; amount_received: string; receiving_currency: string; payment_format: string; }
 export interface AuditEvent { event_id: string; action: "CREATED" | "AGENT_RUN_REQUESTED" | "AGENT_RUN_FINISHED" | "AGENT_RUN_FAILED" | "DECISION_RECORDED"; details: Record<string, unknown>; created_at: string; }
 export interface UploadResult { dataset_id: string; accepted_count: number; rejected_count: number; alerts_created: number; rejection_reasons: { row_number: number; reason: string }[]; rejection_reasons_truncated: boolean; }
-export interface HealthStatus { backend: "healthy" | "degraded" | "offline"; agent: "healthy" | "degraded" | "offline"; rag: "healthy" | "degraded" | "offline"; queue: "healthy" | "degraded" | "offline"; checked_at: string; }
+export interface HealthStatus { backend: "healthy" | "degraded" | "offline"; agent: "healthy" | "degraded" | "offline"; rag: "healthy" | "degraded" | "offline"; queue: "healthy" | "degraded" | "offline" | "not_applicable"; checked_at: string; }
 export interface AlertPage { items: Alert[]; total: number; limit: number; offset: number; }
 export interface SearchRequest { query: string; typology: Typology; top_k: number; }
 export interface SearchResult { retrieved_guidelines: Guideline[]; source_references: string[]; relevance_notes: string[]; }

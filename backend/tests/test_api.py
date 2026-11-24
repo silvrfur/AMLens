@@ -108,3 +108,4 @@ def test_health_reports_each_service(client, monkeypatch):
     body = client.get('/health').json()
     assert body['status'] == 'ok' and body['backend'] == 'healthy' and body['agent'] == 'healthy'
     assert body['rag'] == 'degraded' and body['checked_at']
+    assert body['queue'] == 'not_applicable'

@@ -1,6 +1,7 @@
 """Service health for the frontend status panel.
 
-Each service is "healthy", "degraded" (running on a local stand-in) or "offline".
+Each service is "healthy", "degraded" (running on a local stand-in), "offline",
+or "not_applicable" (not part of this deployment).
 """
 import importlib.util
 import os
@@ -51,8 +52,8 @@ def health():
         'backend': _backend(),
         'agent': _agent(),
         'rag': _rag(),
-        # Runs are synchronous through an in-process queue; Azure Service Bus
-        # is not wired into the backend yet.
-        'queue': 'degraded',
+        # Runs execute synchronously in-process; there is no Azure Service Bus
+        # queue in this deployment, so there is nothing to be unhealthy.
+        'queue': 'not_applicable',
         'checked_at': datetime.now(timezone.utc).isoformat(),
     }

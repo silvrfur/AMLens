@@ -17,6 +17,12 @@ export PYTHONIOENCODING=utf-8 PYTHONUTF8=1
 # On Windows the Azure CLI ends every output line with \r; strip it so values captured with
 # $(az ...) (keys, IDs, URLs) are clean. pipefail keeps az's own exit status.
 az() { command az "$@" | tr -d '\r'; }
+# Build in ACR without streaming logs (the Windows CLI crashes printing them); still waits.
+acr_build() {
+  local status; status="$(az acr build -r "$ACR" "$@" --no-logs --query status -o tsv 2>/dev/null || true)"
+  [ "$status" = Succeeded ] || { echo "Image build failed (${status:-error}): $*  -> az acr task list-runs -r $ACR"; exit 1; }
+  echo "  built: $2"
+}
 RG="${RG:-tpl-azure-aks--mazeazusrqn9-ongz-sbx}"
 LOC="${LOC:-southindia}"
 SUF="$(printf %s "$RG" | md5sum | cut -c1-6)"
@@ -82,10 +88,10 @@ kubectl get nodes -o wide
 
 # ------------------------------------------------------------------ 2. images
 say "2/7 Images (built in ACR)"
-az acr build -r "$ACR" -t "amlens-rag:$TAG" RAG -o none
-az acr build -r "$ACR" -t "amlens-backend:$TAG" -f backend/Dockerfile . -o none
-az acr build -r "$ACR" -t "amlens-frontend:$TAG" frontend -o none
-[ "${SEED:-0}" != 1 ] || az acr build -r "$ACR" -t "amlens-seed:$TAG" infra/seed -o none
+acr_build -t "amlens-rag:$TAG" RAG
+acr_build -t "amlens-backend:$TAG" -f backend/Dockerfile .
+acr_build -t "amlens-frontend:$TAG" frontend
+[ "${SEED:-0}" != 1 ] || acr_build -t "amlens-seed:$TAG" infra/seed
 for img in "docker.io/library/postgres:16-alpine library/postgres:16-alpine" \
            "quay.io/oauth2-proxy/oauth2-proxy:v7.7.1 oauth2-proxy/oauth2-proxy:v7.7.1" \
            "docker.io/curlimages/curl:8.11.0 curlimages/curl:8.11.0"; do

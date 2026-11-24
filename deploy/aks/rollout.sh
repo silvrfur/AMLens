@@ -9,6 +9,12 @@ export PYTHONIOENCODING=utf-8 PYTHONUTF8=1   # Windows az CLI: avoid cp1252 cras
 # On Windows the Azure CLI ends every output line with \r; strip it so values captured with
 # $(az ...) (keys, IDs, URLs) are clean. pipefail keeps az's own exit status.
 az() { command az "$@" | tr -d '\r'; }
+# Build in ACR without streaming logs (the Windows CLI crashes printing them); still waits.
+acr_build() {
+  local status; status="$(az acr build -r "$ACR" "$@" --no-logs --query status -o tsv 2>/dev/null || true)"
+  [ "$status" = Succeeded ] || { echo "Image build failed (${status:-error}): $*  -> az acr task list-runs -r $ACR"; exit 1; }
+  echo "  built: $2"
+}
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; cd "$ROOT"
 RG="${RG:-tpl-azure-aks--mazeazusrqn9-ongz-sbx}"
@@ -22,9 +28,9 @@ TAG="${TAG:-$(git rev-parse --short HEAD)}"
 BUILD="$(mktemp -d)"
 
 echo "== Build $TAG"
-az acr build -r "$ACR" -t "amlens-rag:$TAG" RAG -o none
-az acr build -r "$ACR" -t "amlens-backend:$TAG" -f backend/Dockerfile . -o none
-az acr build -r "$ACR" -t "amlens-frontend:$TAG" frontend -o none
+acr_build -t "amlens-rag:$TAG" RAG
+acr_build -t "amlens-backend:$TAG" -f backend/Dockerfile .
+acr_build -t "amlens-frontend:$TAG" frontend
 
 echo "== Cluster credentials"
 az aks get-credentials -g "$RG" -n "$AKS" --overwrite-existing --file "$BUILD/kubeconfig" -o none

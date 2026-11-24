@@ -193,4 +193,4 @@ for i in $(seq 1 30); do
 done
 echo "  health: $H"
 echo "$H" | grep -q '"rag":"healthy"' || { echo "Not healthy yet: kubectl -n amlens get pods"; exit 1; }
-printf '\nDone: https://%s  (sign in with an account assigned to app %s)\n' "$HOST" "$CLIENT_ID"
+printf '\nDone: https://%s  (accounts: bash deploy/aks/add-user.sh <name>; passwords in deploy/aks/.credentials)\n' "$HOST"

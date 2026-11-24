@@ -11,7 +11,7 @@
 |---|---|
 | URL | `https://amlens-<suffix>.southindia.cloudapp.azure.com` (Azure DNS label on the ingress load balancer) |
 | Cluster | AKS, 2 × Standard_B2s, Azure CNI overlay + Cilium (network policies enforced) |
-| Edge | App-routing NGINX, Let's Encrypt (cert-manager), Entra ID sign-in via oauth2-proxy; only assigned users can sign in; `/api/backend/health` is the only public path |
+| Edge | App-routing NGINX, Let's Encrypt (cert-manager), sign-in via oauth2-proxy with **username/password** accounts (bcrypt, rate-limited); `/api/backend/health` is the only public path. Entra ID is configured too, but the lab tenant needs an admin to approve the app; once approved, remove the three htpasswd/template flags in `edge.yaml` |
 | Apps | `rag`, `backend` (+ agents), `frontend` Deployments; backend and RAG reachable only from inside the namespace |
 | Database | PostgreSQL 16 StatefulSet on an Azure managed disk; nightly `pg_dump` CronJob to Blob Storage (write-only SAS, 14-day lifecycle) |
 | Secrets | Kubernetes Secrets created by `deploy.sh` (never in git): DB password, proxy key, `TOKEN_SECRET`, Azure OpenAI key, Search **query** (read-only) key, backup SAS |
@@ -21,6 +21,9 @@ bash infra/seed/make-seed.sh               # once, needs the local docker databa
 SEED=1 bash deploy/aks/deploy.sh           # first deploy (Git Bash / Linux / macOS, az signed in)
 RG=<rg> TAG=<sha> bash deploy/aks/rollout.sh   # routine release (what CI runs)
 ```
+
+Analyst accounts: `bash deploy/aks/add-user.sh <username>` creates or resets one; the password goes to the
+git-ignored `deploy/aks/.credentials`. Hand it over privately, then delete the file.
 
 Operate with `export KUBECONFIG=deploy/aks/.kubeconfig` (written by deploy.sh):
 `kubectl -n amlens get pods`, `kubectl -n amlens logs deploy/backend`,

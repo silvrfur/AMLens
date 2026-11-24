@@ -3,3 +3,10 @@
 __pycache__/
 .pytest_cache/
 /data/
+# Local SQLite databases and backups (runtime state, not source)
+*.db
+*.db.bak*
+*.sqlite3
+# Shared sample data that teammates load on purpose
+!backend/aml.db
+!agents/data/synthetic_alerts.db

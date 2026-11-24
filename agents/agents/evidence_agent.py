@@ -1,5 +1,11 @@
 from ..schemas.agent_outputs import EvidenceFinding
 
+# Minimum relevance for citing a retrieved passage. Calibrated 2026-11-24 against the
+# live Azure index (text-embedding-3-small): human-verified passages for the agents'
+# typology queries score 0.46-0.66, passages on other AML topics at most 0.37.
+# Re-check if the embedding model or the guidance corpus changes.
+CITATION_MIN_RELEVANCE = 0.45
+
 class EvidenceAgent:
     def __call__(self, state):
         findings = []
@@ -8,7 +14,7 @@ class EvidenceAgent:
                 claim_type='observed_fact', supporting_transaction_ids=pattern.transaction_ids,
                 supporting_chunk_ids=[], evidence_explanation='Reproducible deterministic pattern; see linked metric.',
                 support_status='supported', metric_key=pattern.metric_key))
-        chunks = [g for g in state['retrieved_guidelines'] if g.relevance_score >= .65 and g.typology == state['alert_context'].typology]
+        chunks = [g for g in state['retrieved_guidelines'] if g.relevance_score >= CITATION_MIN_RELEVANCE and g.typology == state['alert_context'].typology]
         if chunks and findings:
             findings.append(EvidenceFinding(claim_id='INTERPRETATION-1',
                 claim='Retrieved guidance provides context for reviewing the observed activity.',

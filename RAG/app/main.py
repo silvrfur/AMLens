@@ -5,6 +5,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 # AMLens imports
@@ -37,6 +38,17 @@ app = FastAPI(
     ),
     version="1.1.0"
 )
+
+# Browser access for the frontend (e.g. RAG_CORS_ORIGINS=http://localhost:3000).
+# Unset = no CORS headers, same as before.
+allowed_origins = [o.strip() for o in os.getenv("RAG_CORS_ORIGINS", "").split(",") if o.strip()]
+if allowed_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed_origins,
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type"],
+    )
 
 
 # ==========================================

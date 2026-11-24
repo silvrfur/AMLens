@@ -23,6 +23,9 @@ TEST_DATABASE_URL = os.getenv('TEST_DATABASE_URL')
 
 os.environ.setdefault('TOKEN_SECRET', 'test-secret-should-be-changed-before-prod-123456789')
 os.environ.setdefault('AML_SOURCE_TIMEZONE', 'UTC')
+# Agent runs in tests stay offline even when .env points at live Azure OpenAI / RAG.
+os.environ['USE_MOCK_LLM'] = 'true'
+os.environ['USE_MOCK_RAG'] = 'true'
 if TEST_DATABASE_URL:
     # Point the whole app (and the agent adapter) at the test database.
     os.environ['DATABASE_URL'] = TEST_DATABASE_URL

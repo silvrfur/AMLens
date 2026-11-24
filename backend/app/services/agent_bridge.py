@@ -6,7 +6,10 @@ Two databases, never the same one:
 - Agent runtime persistence (reports, agent runs, tool calls): the agents
   package's own SQLite file (agent_runtime.db), unchanged.
 
-No service bus or live LLM is required for the local smoke test.
+LLM and RAG come from the environment (backend/.env is loaded by
+app.database.connection): USE_MOCK_LLM, LLM_PROVIDER, AZURE_OPENAI_*,
+USE_MOCK_RAG, RAG_SERVICE_URL. Both default to the offline mocks, so no live
+LLM, RAG or service bus is required for the local smoke test.
 """
 import os
 from pathlib import Path
@@ -55,7 +58,12 @@ def get_agent_persistence():
 
 
 def get_agent_services():
-    """Create a short-lived set of local mock agent services for a synchronous run."""
+    """Create a short-lived set of agent services for a synchronous run.
+
+    The bridge pins only what it owns: the agents' SQLite store, the real
+    PostgreSQL backend adapter and the in-process queue. LLM/RAG settings are
+    read from environment variables by agents.config.Settings.
+    """
     agent = _agent_path()
     zone = os.getenv('AML_SOURCE_TIMEZONE')
     if not zone:
@@ -64,9 +72,6 @@ def get_agent_services():
         _env_file=None,
         database_url='sqlite:///' + agent.as_posix(),
         use_mock_backend=False,
-        use_mock_llm=True,
-        use_mock_rag=True,
         use_mock_service_bus=True,
-        llm_provider='groq',
     )
     return create_services(settings=settings, backend=_team_backend(zone))

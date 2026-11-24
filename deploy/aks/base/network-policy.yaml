@@ -1,0 +1,63 @@
+# Zero-trust inside the namespace: nothing may connect to a pod unless allowed below.
+# Enforced by the cluster's Cilium dataplane. Outbound traffic (Azure OpenAI, AI Search)
+# is not restricted here.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: default-deny-ingress }
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+# Database: only the backend and the migrate/seed/backup jobs.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: postgres-from-db-clients }
+spec:
+  podSelector: { matchLabels: { app: postgres } }
+  ingress:
+    - from: [{ podSelector: { matchLabels: { amlens.io/db-client: "true" } } }]
+      ports: [{ port: 5432 }]
+---
+# Backend: only the frontend's server-side proxy.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: backend-from-frontend }
+spec:
+  podSelector: { matchLabels: { app: backend } }
+  ingress:
+    - from: [{ podSelector: { matchLabels: { app: frontend } } }]
+      ports: [{ port: 8000 }]
+---
+# RAG: the backend (agents) and the frontend proxy (knowledge-base search).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: rag-from-app }
+spec:
+  podSelector: { matchLabels: { app: rag } }
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: backend } }
+        - podSelector: { matchLabels: { app: frontend } }
+      ports: [{ port: 8001 }]
+---
+# Frontend and sign-in proxy: only the ingress controller (and cert-manager's solver).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: edge-from-ingress }
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: app, operator: In, values: [frontend, oauth2-proxy] }
+  ingress:
+    - from:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: app-routing-system } }
+      ports: [{ port: 3000 }, { port: 4180 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: acme-solver-from-ingress }
+spec:
+  podSelector: { matchLabels: { acme.cert-manager.io/http01-solver: "true" } }
+  ingress:
+    - from:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: app-routing-system } }

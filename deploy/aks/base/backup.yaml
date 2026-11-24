@@ -1,0 +1,44 @@
+# Nightly logical backup of the in-cluster PostgreSQL to Azure Blob Storage (outside the
+# cluster). The SAS in amlens-backup allows create/write only: the cluster cannot read or
+# delete existing backups. Retention is a lifecycle rule on the storage account (deploy.sh).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  namespace: amlens
+spec:
+  schedule: "30 20 * * *"            # 02:00 IST
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels: { app: postgres-backup, amlens.io/db-client: "true" }
+        spec:
+          restartPolicy: Never
+          initContainers:
+            - name: dump
+              image: __ACR__/library/postgres:16-alpine
+              command: ["sh", "-c", "pg_dump -h postgres -U amlens -d amlens -Fc -f /backup/amlens.dump && ls -l /backup"]
+              env:
+                - name: PGPASSWORD
+                  valueFrom: { secretKeyRef: { name: amlens-db, key: POSTGRES_PASSWORD } }
+              volumeMounts: [{ name: backup, mountPath: /backup }]
+          containers:
+            - name: upload
+              image: __ACR__/curlimages/curl:8.11.0
+              command:
+                - sh
+                - -c
+                - >-
+                  name="amlens-$(date -u +%Y%m%dT%H%M%SZ).dump";
+                  curl -fsS -X PUT -H "x-ms-blob-type: BlockBlob" --data-binary @/backup/amlens.dump
+                  "${BACKUP_CONTAINER_URL}/${name}?${BACKUP_SAS}" && echo "uploaded ${name}"
+              envFrom: [{ secretRef: { name: amlens-backup } }]
+              volumeMounts: [{ name: backup, mountPath: /backup }]
+          volumes:
+            - name: backup
+              emptyDir: {}

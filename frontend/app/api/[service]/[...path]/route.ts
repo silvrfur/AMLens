@@ -45,7 +45,10 @@ async function proxy(request: NextRequest, { params }: { params: { service: stri
   }
   const key = process.env.AMLENS_PROXY_KEY;
   if (key) headers.set("x-amlens-proxy-key", key);
-  const user = request.headers.get("x-ms-client-principal-name");
+  // Signed-in user, set by the platform's auth layer (never trusted from the browser):
+  // Azure Container Apps Easy Auth, or oauth2-proxy behind ingress-nginx on AKS
+  // (auth-response-headers overwrites any client-sent copy).
+  const user = request.headers.get("x-ms-client-principal-name") ?? request.headers.get("x-auth-request-email");
   if (user) headers.set("x-amlens-user", user);
 
   const hasBody = !["GET", "HEAD"].includes(request.method);

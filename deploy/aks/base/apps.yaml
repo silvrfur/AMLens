@@ -1,0 +1,113 @@
+# The three application services. None is exposed directly: the frontend is reached
+# through the ingress (behind Entra ID sign-in), the backend and RAG only from inside.
+# __ACR__ / __TAG__ are filled in by deploy.sh (registry and git SHA).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag
+  labels: { app: rag }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: rag } }
+  template:
+    metadata:
+      labels: { app: rag }
+    spec:
+      containers:
+        - name: rag
+          image: __ACR__/amlens-rag:__TAG__
+          ports: [{ containerPort: 8001 }]
+          env:
+            - { name: RAG_BACKEND, value: azure }
+          envFrom:
+            - configMapRef: { name: amlens-config }
+            - secretRef: { name: amlens-ai, optional: true }   # keys mode only
+          readinessProbe: { httpGet: { path: /health, port: 8001 }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /health, port: 8001 }, periodSeconds: 30 }
+          resources:
+            requests: { cpu: 100m, memory: 192Mi }
+            limits: { memory: 512Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: rag }
+spec:
+  selector: { app: rag }
+  ports: [{ port: 8001, targetPort: 8001 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  labels: { app: backend }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: backend } }
+  template:
+    metadata:
+      labels: { app: backend, amlens.io/db-client: "true" }
+    spec:
+      containers:
+        - name: backend
+          image: __ACR__/amlens-backend:__TAG__
+          ports: [{ containerPort: 8000 }]
+          env:
+            - { name: RUN_MIGRATIONS, value: "false" }          # the migrate Job runs them
+            - { name: AML_SOURCE_TIMEZONE, value: UTC }
+            - { name: USE_MOCK_LLM, value: "false" }
+            - { name: LLM_PROVIDER, value: azure_openai }
+            - { name: USE_MOCK_RAG, value: "false" }
+            - { name: RAG_SERVICE_URL, value: "http://rag:8001" }
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: amlens-db, key: DATABASE_URL } }
+            - name: AML_AGENT_DATABASE_URL                      # agent runs in PostgreSQL too
+              valueFrom: { secretKeyRef: { name: amlens-db, key: DATABASE_URL } }
+          envFrom:
+            - configMapRef: { name: amlens-config }
+            - secretRef: { name: amlens-app }                   # TOKEN_SECRET, AML_PROXY_KEY
+            - secretRef: { name: amlens-ai, optional: true }
+          readinessProbe: { httpGet: { path: /health, port: 8000 }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /health, port: 8000 }, periodSeconds: 30, failureThreshold: 5 }
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { memory: 1Gi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: backend }
+spec:
+  selector: { app: backend }
+  ports: [{ port: 8000, targetPort: 8000 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels: { app: frontend }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: frontend } }
+  template:
+    metadata:
+      labels: { app: frontend }
+    spec:
+      containers:
+        - name: frontend
+          image: __ACR__/amlens-frontend:__TAG__
+          ports: [{ containerPort: 3000 }]
+          env:
+            - { name: AMLENS_BACKEND_URL, value: "http://backend:8000" }
+            - { name: AMLENS_RAG_URL, value: "http://rag:8001" }
+            - name: AMLENS_PROXY_KEY
+              valueFrom: { secretKeyRef: { name: amlens-app, key: AML_PROXY_KEY } }
+          readinessProbe: { httpGet: { path: /, port: 3000 }, periodSeconds: 10 }
+          resources:
+            requests: { cpu: 100m, memory: 192Mi }
+            limits: { memory: 512Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: frontend }
+spec:
+  selector: { app: frontend }
+  ports: [{ port: 3000, targetPort: 3000 }]

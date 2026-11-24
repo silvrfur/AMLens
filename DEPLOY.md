@@ -1,5 +1,36 @@
 # Deploying AMLens to Azure
 
+> **Live deployment (training sandbox): AKS.** The sandbox subscription allows only AKS, VMs,
+> ACR, Storage and Key Vault in one resource group in `southindia` (no Container Apps, no managed
+> PostgreSQL, no private DNS), so AMLens runs on AKS there: `deploy/aks/`.
+> The Container Apps design further below (`infra/`) is for an unrestricted subscription.
+
+## AKS (current deployment)
+
+| Piece | How |
+|---|---|
+| URL | `https://amlens-<suffix>.southindia.cloudapp.azure.com` (Azure DNS label on the ingress load balancer) |
+| Cluster | AKS, 2 × Standard_B2s, Azure CNI overlay + Cilium (network policies enforced) |
+| Edge | App-routing NGINX, Let's Encrypt (cert-manager), Entra ID sign-in via oauth2-proxy; only assigned users can sign in; `/api/backend/health` is the only public path |
+| Apps | `rag`, `backend` (+ agents), `frontend` Deployments; backend and RAG reachable only from inside the namespace |
+| Database | PostgreSQL 16 StatefulSet on an Azure managed disk; nightly `pg_dump` CronJob to Blob Storage (write-only SAS, 14-day lifecycle) |
+| Secrets | Kubernetes Secrets created by `deploy.sh` (never in git): DB password, proxy key, `TOKEN_SECRET`, Azure OpenAI key, Search **query** (read-only) key, backup SAS |
+
+```bash
+bash infra/seed/make-seed.sh               # once, needs the local docker database
+SEED=1 bash deploy/aks/deploy.sh           # first deploy (Git Bash / Linux / macOS, az signed in)
+RG=<rg> TAG=<sha> bash deploy/aks/rollout.sh   # routine release (what CI runs)
+```
+
+Operate with `export KUBECONFIG=deploy/aks/.kubeconfig` (written by deploy.sh):
+`kubectl -n amlens get pods`, `kubectl -n amlens logs deploy/backend`,
+backups: `kubectl -n amlens create job --from=cronjob/postgres-backup backup-now`.
+
+Sandbox limits to know: Azure writes need MFA (`az login` again when prompted); the lab
+subscription may expire; Azure OpenAI/Search use keys (workload identity is not allowed here).
+
+---
+
 Target: **Azure Container Apps** in a VNet, defined in `infra/main.bicep` and rolled out by
 `infra/deploy.ps1` (first time) and `.github/workflows/ci-cd.yml` (every merge to `main`).
 

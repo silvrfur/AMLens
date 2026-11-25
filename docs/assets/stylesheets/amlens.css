@@ -1,0 +1,117 @@
+/* AMLens documentation theme.
+   Brand navy matches the application's primary buttons. The user guide uses a teal
+   accent and the developer guide an indigo accent, so readers always know which
+   guide they are in. */
+
+:root,
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #1f4e6b;
+  --md-primary-fg-color--light: #2f6a8d;
+  --md-primary-fg-color--dark: #163a50;
+  --md-accent-fg-color: #2f7fb0;
+  --amlens-user: #0f7b6c;
+  --amlens-user-soft: #e3f4f1;
+  --amlens-dev: #4f46b5;
+  --amlens-dev-soft: #ecebfb;
+  --amlens-ref: #6b5a1f;
+  --amlens-ref-soft: #f6f1df;
+  --amlens-card-border: #dde3e8;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #18394d;
+  --md-primary-fg-color--light: #24506b;
+  --md-primary-fg-color--dark: #102838;
+  --md-accent-fg-color: #6cb4e0;
+  --md-default-bg-color: #11161b;
+  --amlens-user: #4fd1bd;
+  --amlens-user-soft: rgba(79, 209, 189, 0.12);
+  --amlens-dev: #a5a0ff;
+  --amlens-dev-soft: rgba(165, 160, 255, 0.12);
+  --amlens-ref: #e3c766;
+  --amlens-ref-soft: rgba(227, 199, 102, 0.12);
+  --amlens-card-border: #2a333c;
+}
+
+/* ---- Audience badge and accents ------------------------------------------------ */
+
+.amlens-badge {
+  display: inline-block;
+  margin-bottom: 0.4rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.amlens-badge-user { color: var(--amlens-user); background: var(--amlens-user-soft); }
+.amlens-badge-developer { color: var(--amlens-dev); background: var(--amlens-dev-soft); }
+.amlens-badge-reference { color: var(--amlens-ref); background: var(--amlens-ref-soft); }
+
+.md-typeset .amlens-audience-user h1 { border-bottom: 3px solid var(--amlens-user); padding-bottom: 0.3rem; }
+.md-typeset .amlens-audience-developer h1 { border-bottom: 3px solid var(--amlens-dev); padding-bottom: 0.3rem; }
+.md-typeset .amlens-audience-reference h1 { border-bottom: 3px solid var(--amlens-ref); padding-bottom: 0.3rem; }
+
+.md-typeset .amlens-audience-user a { color: var(--amlens-user); }
+.md-typeset .amlens-audience-developer a { color: var(--amlens-dev); }
+
+/* Numbered steps in the user guide read as a procedure. */
+.md-typeset .amlens-audience-user ol > li { margin-bottom: 0.35rem; }
+
+/* ---- Screenshots --------------------------------------------------------------- */
+
+.md-typeset img.screenshot,
+.md-typeset figure img {
+  border: 1px solid var(--amlens-card-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 18px rgba(16, 40, 56, 0.08);
+}
+.md-typeset figure { margin: 1.2rem auto; }
+.md-typeset figcaption { font-size: 0.68rem; color: var(--md-default-fg-color--light); max-width: 100%; }
+
+/* ---- Landing page -------------------------------------------------------------- */
+
+.amlens-hero {
+  margin: 0 0 1.6rem;
+  padding: 2rem 1.6rem;
+  border-radius: 14px;
+  color: #fff;
+  background: linear-gradient(135deg, #163a50 0%, #1f4e6b 55%, #2f6a8d 100%);
+}
+.amlens-hero h1 { margin: 0 0 0.5rem; color: #fff; font-weight: 700; border: 0 !important; }
+.amlens-hero p { margin: 0; max-width: 40rem; color: rgba(255, 255, 255, 0.88); font-size: 0.86rem; }
+
+.amlens-audiences {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem;
+  margin: 0 0 2rem;
+}
+.md-typeset a.amlens-audience-card {
+  display: block;
+  padding: 1.2rem 1.3rem;
+  border: 1px solid var(--amlens-card-border);
+  border-top-width: 4px;
+  border-radius: 12px;
+  color: var(--md-default-fg-color);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.md-typeset a.amlens-audience-card:hover { box-shadow: 0 8px 24px rgba(16, 40, 56, 0.12); transform: translateY(-2px); }
+.md-typeset a.amlens-audience-card.user { border-top-color: var(--amlens-user); }
+.md-typeset a.amlens-audience-card.developer { border-top-color: var(--amlens-dev); }
+.amlens-audience-card .amlens-card-title { display: block; margin-bottom: 0.35rem; font-size: 0.95rem; font-weight: 700; }
+.amlens-audience-card.user .amlens-card-title { color: var(--amlens-user); }
+.amlens-audience-card.developer .amlens-card-title { color: var(--amlens-dev); }
+.amlens-audience-card .amlens-card-body { display: block; font-size: 0.74rem; color: var(--md-default-fg-color--light); }
+.amlens-audience-card .amlens-card-cta { display: block; margin-top: 0.7rem; font-size: 0.72rem; font-weight: 600; }
+
+/* Material grid cards used on section index pages. */
+.md-typeset .grid.cards > ul > li { border-radius: 10px; }
+
+@media screen and (max-width: 44.9375em) {
+  .amlens-hero { padding: 1.4rem 1.1rem; }
+}
+
+/* Page titles: darker and bolder than Material's default light H1. */
+.md-typeset h1 { color: var(--md-default-fg-color); font-weight: 700; }

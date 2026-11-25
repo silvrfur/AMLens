@@ -1,0 +1,180 @@
+site_name: AMLens Documentation
+site_description: User and developer documentation for AMLens, an AI-assisted anti-money-laundering alert investigation workspace.
+repo_url: https://github.com/silvrfur/AMLens
+repo_name: silvrfur/AMLens
+edit_uri: edit/main/docs/
+docs_dir: docs
+strict: true
+exclude_docs: |
+  overrides/
+
+theme:
+  name: material
+  custom_dir: docs/overrides
+  language: en
+  font:
+    text: Inter
+    code: JetBrains Mono
+  icon:
+    logo: material/shield-search
+    repo: fontawesome/brands/github
+  favicon: assets/favicon.svg
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.indexes
+    - navigation.path
+    - navigation.top
+    - navigation.footer
+    - navigation.instant
+    - navigation.tracking
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+
+extra_css:
+  - assets/stylesheets/amlens.css
+
+plugins:
+  - search
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.snippets
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+validation:
+  nav:
+    omitted_files: warn
+    not_found: warn
+  links:
+    not_found: warn
+    anchors: warn
+    absolute_links: info
+    unrecognized_links: warn
+
+nav:
+  - Home: index.md
+  - User guide:
+      - user-guide/index.md
+      - Introduction: user-guide/introduction.md
+      - Getting started: user-guide/getting-started.md
+      - Account and sign-in: user-guide/account-and-login.md
+      - Navigation and dashboard: user-guide/navigation-and-dashboard.md
+      - Features:
+          - Upload transaction data: user-guide/features/upload-data.md
+          - Alert queue: user-guide/features/alert-queue.md
+          - Reviewing an alert: user-guide/features/alert-review.md
+          - AI investigation: user-guide/features/ai-investigation.md
+          - Reading the investigation report: user-guide/features/investigation-report.md
+          - Recording a decision: user-guide/features/recording-decisions.md
+          - Investigations list: user-guide/features/investigations-list.md
+          - Audit trail: user-guide/features/audit-trail.md
+          - Knowledge base: user-guide/features/knowledge-base.md
+          - Settings and service health: user-guide/features/settings-and-health.md
+      - Workflows:
+          - Your first case, end to end: user-guide/workflows/first-case-end-to-end.md
+          - Working the daily alert queue: user-guide/workflows/daily-alert-triage.md
+          - Retrying a failed investigation: user-guide/workflows/retry-failed-investigation.md
+          - Preparing evidence for an audit: user-guide/workflows/audit-evidence.md
+      - Understanding results: user-guide/understanding-results.md
+      - Troubleshooting: user-guide/troubleshooting.md
+      - FAQ: user-guide/faq.md
+      - Glossary: user-guide/glossary.md
+  - Developer guide:
+      - developer-guide/index.md
+      - Getting started:
+          - Prerequisites: developer-guide/getting-started/prerequisites.md
+          - Installation: developer-guide/getting-started/installation.md
+          - Local development: developer-guide/getting-started/local-development.md
+          - Configuration: developer-guide/getting-started/configuration.md
+      - Architecture:
+          - Overview: developer-guide/architecture/overview.md
+          - System architecture: developer-guide/architecture/system-architecture.md
+          - Frontend architecture: developer-guide/architecture/frontend-architecture.md
+          - Backend architecture: developer-guide/architecture/backend-architecture.md
+          - Data flow: developer-guide/architecture/data-flow.md
+          - Architecture decisions: developer-guide/architecture/architecture-decisions.md
+      - Modules:
+          - developer-guide/modules/index.md
+          - Transaction ingestion: developer-guide/modules/transaction-ingestion.md
+          - Detection rules: developer-guide/modules/detection-rules.md
+          - Investigation service: developer-guide/modules/investigation-service.md
+          - Agent pipeline: developer-guide/modules/agent-pipeline.md
+          - Report verifier: developer-guide/modules/report-verifier.md
+          - RAG service: developer-guide/modules/rag-service.md
+          - Frontend proxy: developer-guide/modules/frontend-proxy.md
+      - API reference:
+          - Overview: developer-guide/api-reference/overview.md
+          - Backend endpoints: developer-guide/api-reference/endpoints.md
+          - Schemas: developer-guide/api-reference/schemas.md
+          - Agents API: developer-guide/api-reference/agents-api.md
+          - RAG API: developer-guide/api-reference/rag-api.md
+      - Database:
+          - Overview: developer-guide/database/overview.md
+          - Schema: developer-guide/database/schema.md
+          - Migrations: developer-guide/database/migrations.md
+      - Authentication: developer-guide/authentication/index.md
+      - Integrations:
+          - Azure OpenAI: developer-guide/integrations/azure-openai.md
+          - Azure AI Search: developer-guide/integrations/azure-ai-search.md
+      - Testing: developer-guide/testing/index.md
+      - Deployment:
+          - Production environment: developer-guide/deployment/index.md
+          - AKS deployment: developer-guide/deployment/aks-deployment.md
+          - CI/CD pipeline: developer-guide/deployment/ci-cd.md
+          - Operations runbook: developer-guide/deployment/operations-runbook.md
+          - Container Apps design: developer-guide/deployment/container-apps-design.md
+      - Security: developer-guide/security/index.md
+      - Monitoring: developer-guide/monitoring/index.md
+      - Contributing: developer-guide/contributing/index.md
+  - Reference:
+      - Technology stack: reference/technology-stack.md
+      - Terminology: reference/terminology.md
+      - Supported platforms: reference/supported-platforms.md
+      - Release notes: reference/release-notes.md

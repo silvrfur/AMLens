@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{#- Pages declare `audience: user` or `audience: developer` in their front matter.
+    The wrapper class gives each guide its own accent colour and a section badge. -#}
+{% block content %}
+  {% set audience = page.meta.audience if page and page.meta and page.meta.audience else "" %}
+  <div class="amlens-page{% if audience %} amlens-audience-{{ audience }}{% endif %}">
+    {% if audience == "user" %}
+      <span class="amlens-badge amlens-badge-user">User guide</span>
+    {% elif audience == "developer" %}
+      <span class="amlens-badge amlens-badge-developer">Developer guide</span>
+    {% elif audience == "reference" %}
+      <span class="amlens-badge amlens-badge-reference">Reference</span>
+    {% endif %}
+    {{ super() }}
+  </div>
+{% endblock %}

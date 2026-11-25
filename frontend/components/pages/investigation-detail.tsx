@@ -138,10 +138,36 @@ export function InvestigationDetailPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const [citation, setCitation] = useState<Guideline | null>(null);
-  const reportQuery = useQuery({ queryKey: ["investigation-report", id], queryFn: () => api.getInvestigationReport(id), enabled: Boolean(id) });
   const summaryQuery = useQuery({ queryKey: ["investigation", id], queryFn: () => api.getInvestigation(id), enabled: Boolean(id) });
-  if (reportQuery.isLoading || summaryQuery.isLoading) return <><PageHeader title="Investigation review" /><Panel title="Loading investigation"><LoadingRows count={6} /></Panel></>;
-  if (reportQuery.isError || !reportQuery.data) return <><PageHeader backHref="/investigations" title="Investigation not found" /><ErrorPanel message={reportQuery.error?.message ?? "The investigation could not be loaded."} onRetry={() => reportQuery.refetch()} /></>;
+  // Only completed/incomplete runs have a report; a failed or not-yet-run investigation has none.
+  const runStatus = summaryQuery.data?.execution_status;
+  const hasReport = runStatus === "completed" || runStatus === "incomplete";
+  const reportQuery = useQuery({ queryKey: ["investigation-report", id], queryFn: () => api.getInvestigationReport(id), enabled: Boolean(id) && hasReport });
+  const runMutation = useMutation({
+    mutationFn: () => api.runInvestigation(id),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["investigation", id] });
+      queryClient.invalidateQueries({ queryKey: ["investigation-report", id] });
+      queryClient.invalidateQueries({ queryKey: ["investigations"] });
+    },
+  });
+  if (summaryQuery.isLoading || (hasReport && reportQuery.isLoading)) return <><PageHeader title="Investigation review" /><Panel title="Loading investigation"><LoadingRows count={6} /></Panel></>;
+  if (summaryQuery.isError || !summaryQuery.data) return <><PageHeader backHref="/investigations" title="Investigation not found" /><ErrorPanel message={summaryQuery.error?.message ?? "The investigation could not be loaded."} onRetry={() => summaryQuery.refetch()} /></>;
+  if (!hasReport) {
+    const failed = runStatus === "failed";
+    const running = runStatus === "running" || runMutation.isPending;
+    return <>
+      <PageHeader backHref="/investigations" eyebrow="INVESTIGATION REVIEW" title={<span className="detail-title-row"><span>{id}</span><StatusBadge status={running ? "running" : runStatus ?? "pending"} /></span>} description={`Alert ${summaryQuery.data.alert_id} · Created ${formatDate(summaryQuery.data.created_at)}`} action={<Link className="button-secondary" href={`/alerts/${summaryQuery.data.alert_id}`}>Open source alert <ExternalLink /></Link>} />
+      <Panel title={running ? "Investigation in progress" : failed ? "The AI run did not finish" : "Not run yet"} description={running ? "The agents are preparing a draft report. No decision will be made automatically." : failed ? "No report was produced, usually because a connected service (AI model or guidance search) was unavailable. Running it again is safe: completed steps are repeated and the case history is kept." : "Start the AI investigation to produce an evidence-linked draft report."}>
+        {running ? <LoadingRows count={3} /> : <div className="detail-header-actions">
+          <button type="button" className="button-primary" onClick={() => runMutation.mutate()}>{failed ? "Run investigation again" : "Run investigation"}</button>
+          <Link className="button-secondary" href={`/audit?investigation_id=${encodeURIComponent(id)}`}>View event history <ArrowRight /></Link>
+        </div>}
+        {runMutation.isError && <p className="decision-error" role="alert">{(runMutation.error as Error).message}</p>}
+      </Panel>
+    </>;
+  }
+  if (reportQuery.isError || !reportQuery.data) return <><PageHeader backHref="/investigations" title="Report unavailable" /><ErrorPanel message={reportQuery.error?.message ?? "The report could not be loaded."} onRetry={() => reportQuery.refetch()} /></>;
   const response = reportQuery.data;
   const summary = summaryQuery.data;
   const exportReport = () => downloadJson(`${id}-investigation-report.json`, redactSensitiveIdentifiers(response));

@@ -10,3 +10,7 @@ __pycache__/
 # Shared sample data that teammates load on purpose
 !backend/aml.db
 !agents/data/synthetic_alerts.db
+
+# Documentation build output
+site/
+.venv-docs/

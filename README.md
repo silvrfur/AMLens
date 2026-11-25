@@ -1,6 +1,28 @@
 # AMLens
 
-AI-assisted review workspace for transaction-monitoring alerts. Four parts, one per team member:
+AI-assisted review workspace for transaction-monitoring alerts.
+
+## Documentation
+
+The full documentation lives in [`docs/`](docs/index.md) and builds into a searchable site:
+
+| Guide | For | Start here |
+|---|---|---|
+| **User guide** | Analysts using the application | [docs/user-guide](docs/user-guide/index.md) |
+| **Developer guide** | Engineers building, testing, deploying and operating AMLens | [docs/developer-guide](docs/developer-guide/index.md) |
+| **Reference** | Technology stack, terminology, release notes | [docs/reference](docs/reference/technology-stack.md) |
+
+Preview the documentation site locally:
+
+```powershell
+python -m venv .venv-docs
+.venv-docs\Scripts\python -m pip install -r docs\requirements.txt
+.venv-docs\Scripts\mkdocs serve      # http://127.0.0.1:8000
+```
+
+## Repository layout
+
+Four parts, one per team member:
 
 | Folder | What it is | Port |
 |---|---|---|
@@ -19,7 +41,6 @@ Every block below starts from the repository root.
 ```powershell
 git clone https://github.com/silvrfur/AMLens.git
 cd AMLens
-git checkout integration
 
 # Database (PostgreSQL 16 on 127.0.0.1:5433)
 cd backend; docker compose up -d; cd ..
@@ -115,6 +136,8 @@ docker compose up --build
 
 ## Deploying
 
-See `DEPLOY.md` (Azure Container Apps).
+The live deployment runs on Azure Kubernetes Service: see the
+[deployment guide](docs/developer-guide/deployment/index.md) and `DEPLOY.md`
+(which also contains the Azure Container Apps design for an unrestricted subscription).
 
 See `backend/README.md` and `RAG/README.md` for details on each service.

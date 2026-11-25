@@ -1,0 +1,9 @@
+.env
+.venv/
+**/__pycache__/
+documents/
+extracted/
+chunks/
+scripts/
+*.csv
+requirements.txt.txt

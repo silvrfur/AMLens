@@ -1,0 +1,23 @@
+# One-off sample data load (infra/seed). Refuses to load into a database that already has alerts.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: seed
+  namespace: amlens
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: { app: seed, amlens.io/db-client: "true" }
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: seed
+          image: __ACR__/amlens-seed:__TAG__
+          env:
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: amlens-db, key: DATABASE_URL_LIBPQ } }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }

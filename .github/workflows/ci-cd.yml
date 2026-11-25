@@ -1,0 +1,114 @@
+# Tests every pull request and push; on main, builds the images in Azure Container Registry
+# and rolls them out to AKS: migrations, then RAG, then the backend, then the frontend
+# (deploy/aks/rollout.sh). Infrastructure and secrets are set up once by deploy/aks/deploy.sh.
+#
+# One-time setup (DEPLOY.md, "CI/CD"): create an Entra ID app with a federated credential for
+# this repo's `production` environment, give it Contributor on the resource group, and set these
+# repository variables (not secrets; OIDC needs no stored password):
+#   AZURE_CLIENT_ID  AZURE_TENANT_ID  AZURE_SUBSCRIPTION_ID  AZURE_RESOURCE_GROUP
+name: CI/CD
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: amlens
+          POSTGRES_PASSWORD: amlens_dev
+          POSTGRES_DB: amlens_test
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U amlens -d amlens_test"
+          --health-interval 5s --health-retries 10
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      # Throwaway CI database ("test" in the name: the suites wipe it).
+      TEST_DATABASE_URL: postgresql+psycopg://amlens:amlens_dev@127.0.0.1:5433/amlens_test
+      AML_AGENT_TEST_DATABASE_URL: postgresql://amlens:amlens_dev@127.0.0.1:5433/amlens_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"     # same as the backend and RAG images
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            agents/requirements.txt
+
+      - name: Install backend + agents
+        run: pip install -r backend/requirements.txt -r agents/requirements.txt
+
+      - name: Agent tests (SQLite and PostgreSQL stores)
+        run: python -m pytest agents/tests -q
+
+      - name: Backend tests (mock LLM/RAG, real PostgreSQL)
+        working-directory: backend
+        run: python -m pytest -q
+
+      - name: RAG imports without the FAISS/torch stack (Azure image contents)
+        run: |
+          python -m venv /tmp/rag && /tmp/rag/bin/pip install -q -r RAG/requirements-azure.txt
+          cd RAG && RAG_BACKEND=azure AZURE_SEARCH_ENDPOINT=https://example.search.windows.net \
+            AZURE_SEARCH_INDEX_NAME=x AZURE_OPENAI_BASE_URL=https://example.openai.azure.com/openai/v1/ \
+            AZURE_OPENAI_API_KEY=x AZURE_SEARCH_ADMIN_KEY=x \
+            /tmp/rag/bin/python -c "from app.main import app; print('rag ok')"
+
+      - uses: pnpm/action-setup@v4          # version from frontend/package.json "packageManager"
+        with:
+          package_json_file: frontend/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"                 # same as the frontend image
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Frontend type-check and build
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_USE_MOCKS: "false"
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec tsc --noEmit
+          pnpm build
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    environment: production                 # add required reviewers here to gate releases
+    permissions:
+      contents: read
+      id-token: write                       # OIDC sign-in to Azure, no stored credentials
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: azure/setup-kubectl@v4
+
+      - name: Build, migrate, roll out RAG -> backend -> frontend, smoke test
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          TAG: ${{ github.sha }}
+        run: bash deploy/aks/rollout.sh

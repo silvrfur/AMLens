@@ -1,0 +1,4 @@
+.kubeconfig
+.build/
+.deploy.log
+.credentials

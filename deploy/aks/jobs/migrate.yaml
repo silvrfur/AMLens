@@ -1,0 +1,25 @@
+# Applies database migrations (alembic upgrade head). deploy.sh and the pipeline delete and
+# re-create it before each rollout, then wait for it to complete.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+  namespace: amlens
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: { app: migrate, amlens.io/db-client: "true" }
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: __ACR__/amlens-backend:__TAG__
+          command: ["alembic", "upgrade", "head"]
+          env:
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: amlens-db, key: DATABASE_URL } }
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 512Mi }

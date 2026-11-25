@@ -1,0 +1,43 @@
+# Production-like local run of the three deployable images (same wiring as Azure):
+# only the frontend is published; backend and RAG are reachable only inside this network.
+#
+#   cd backend; docker compose up -d; cd ..      # dev PostgreSQL on 127.0.0.1:5433 (holds the data)
+#   docker compose up --build                     # then open http://localhost:3100
+#
+# Secrets come from the same git-ignored files as local development:
+#   backend/.env  (TOKEN_SECRET, AZURE_OPENAI_*, USE_MOCK_LLM ...)   RAG/.env  (AZURE_SEARCH_*, AZURE_OPENAI_*)
+# Values under `environment:` override those files.
+services:
+  rag:
+    build: ./RAG
+    env_file: RAG/.env
+    environment:
+      RAG_BACKEND: azure
+      RAG_CORS_ORIGINS: ""            # browser never calls RAG directly
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file: backend/.env
+    environment:
+      DATABASE_URL: ${AMLENS_DATABASE_URL:-postgresql+psycopg://amlens:amlens_dev@host.docker.internal:5433/amlens}
+      AML_SOURCE_DATABASE_URL: ""
+      # Agent runs go to PostgreSQL (schema agent_runtime), not a file in the container.
+      AML_AGENT_DATABASE_URL: ${AMLENS_DATABASE_URL:-postgresql+psycopg://amlens:amlens_dev@host.docker.internal:5433/amlens}
+      RAG_SERVICE_URL: http://rag:8001
+      AML_PROXY_KEY: ${AMLENS_PROXY_KEY:-local-compose-proxy-key-change-me-0123456789}
+      AML_CORS_ORIGINS: ""            # same-origin via the frontend proxy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on: [rag]
+
+  frontend:
+    build: ./frontend
+    environment:
+      AMLENS_BACKEND_URL: http://backend:8000
+      AMLENS_RAG_URL: http://rag:8001
+      AMLENS_PROXY_KEY: ${AMLENS_PROXY_KEY:-local-compose-proxy-key-change-me-0123456789}
+    ports:
+      - "127.0.0.1:3100:3000"
+    depends_on: [backend]

@@ -1,0 +1,22 @@
+# Build context for backend/Dockerfile (built from the repo root).
+**/.env
+**/.env.*
+!**/.env.example
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/*.db
+**/*.db.bak*
+**/*.sqlite3
+.git/
+frontend/
+RAG/
+backend/data/
+backend/tests/
+backend/examples/
+agents/tests/
+agents/data/
+*.pdf
+infra/
+.github/
+DEPLOY.md

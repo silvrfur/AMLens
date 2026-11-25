@@ -1,0 +1,155 @@
+# Public edge: one HTTPS host (Azure DNS label on the ingress load balancer), Let's Encrypt
+# certificate, and Entra ID sign-in (oauth2-proxy) in front of everything except the health
+# status. Placeholders (__HOST__, __DNSLABEL__, __TENANT__, __ACR__) are filled in by deploy.sh.
+#
+# Ingress controller: AKS application routing add-on (Microsoft-managed NGINX), with its own
+# load balancer so it can carry the DNS label.
+apiVersion: approuting.kubernetes.azure.com/v1alpha1
+kind: NginxIngressController
+metadata:
+  name: amlens
+spec:
+  ingressClassName: amlens-nginx
+  controllerNamePrefix: amlens-nginx
+  # Each controller replica reserves 0.5 vCPU; the default of 2 does not fit two B2s nodes.
+  scaling: { minReplicas: 1, maxReplicas: 2, threshold: steady }
+  loadBalancerAnnotations:
+    service.beta.kubernetes.io/azure-dns-label-name: __DNSLABEL__
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef: { name: letsencrypt-account }
+    solvers:
+      - http01:
+          ingress: { ingressClassName: amlens-nginx }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy
+  namespace: amlens
+  labels: { app: oauth2-proxy }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: oauth2-proxy } }
+  template:
+    metadata:
+      labels: { app: oauth2-proxy }
+    spec:
+      containers:
+        - name: oauth2-proxy
+          image: __ACR__/oauth2-proxy/oauth2-proxy:v7.7.1
+          args:
+            - --provider=oidc
+            - --oidc-issuer-url=https://login.microsoftonline.com/__TENANT__/v2.0
+            - --oidc-email-claim=preferred_username        # Entra sign-in name
+            - --insecure-oidc-allow-unverified-email=true  # preferred_username is not an "email_verified" claim
+            - --scope=openid profile email
+            - --email-domain=*                             # who may sign in is controlled in Entra (assignment required)
+            - --upstream=static://202
+            - --http-address=0.0.0.0:4180
+            - --reverse-proxy=true
+            - --set-xauthrequest=true
+            - --cookie-secure=true
+            - --cookie-samesite=lax
+            - --redirect-url=https://__HOST__/oauth2/callback
+            - --whitelist-domain=__HOST__
+            # Username/password accounts (bcrypt, secret amlens-htpasswd). The lab tenant needs an
+            # admin to approve the Entra ID app, so its button is hidden by the custom sign-in page;
+            # drop these three flags (and the templates) to go back to Entra ID once approved.
+            - --htpasswd-file=/etc/oauth2-proxy/htpasswd/users
+            - --display-htpasswd-form=true
+            - --custom-templates-dir=/etc/oauth2-proxy/templates
+          env:
+            - name: OAUTH2_PROXY_CLIENT_ID
+              valueFrom: { secretKeyRef: { name: amlens-oauth, key: client-id } }
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom: { secretKeyRef: { name: amlens-oauth, key: client-secret } }
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom: { secretKeyRef: { name: amlens-oauth, key: cookie-secret } }
+          ports: [{ containerPort: 4180 }]
+          readinessProbe: { httpGet: { path: /ping, port: 4180 }, periodSeconds: 10 }
+          volumeMounts:
+            - { name: htpasswd, mountPath: /etc/oauth2-proxy/htpasswd, readOnly: true }
+            - { name: templates, mountPath: /etc/oauth2-proxy/templates, readOnly: true }
+          resources:
+            requests: { cpu: 25m, memory: 32Mi }
+            limits: { memory: 128Mi }
+      volumes:
+        - name: htpasswd
+          secret: { secretName: amlens-htpasswd }
+        - name: templates
+          configMap: { name: signin-templates }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: oauth2-proxy, namespace: amlens }
+spec:
+  selector: { app: oauth2-proxy }
+  ports: [{ port: 4180, targetPort: 4180 }]
+---
+# The app, behind sign-in. The certificate is requested from this Ingress.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: amlens-web
+  namespace: amlens
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    nginx.ingress.kubernetes.io/auth-url: "http://oauth2-proxy.amlens.svc.cluster.local:4180/oauth2/auth"
+    nginx.ingress.kubernetes.io/auth-signin: "https://$host/oauth2/sign_in?rd=$escaped_request_uri"
+    # Copies the signed-in user from oauth2-proxy onto the request (overwriting any client copy).
+    nginx.ingress.kubernetes.io/auth-response-headers: "X-Auth-Request-Email,X-Auth-Request-User"
+    nginx.ingress.kubernetes.io/proxy-body-size: "25m"       # CSV uploads
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"    # investigations run in the request
+spec:
+  ingressClassName: amlens-nginx
+  tls: [{ hosts: [__HOST__], secretName: amlens-tls }]
+  rules:
+    - host: __HOST__
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: { service: { name: frontend, port: { number: 3000 } } }
+---
+# Sign-in endpoints (/oauth2/sign_in, /oauth2/sign_out, ...), rate-limited per client IP
+# to slow down password guessing.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: amlens-oauth2
+  namespace: amlens
+  annotations:
+    nginx.ingress.kubernetes.io/limit-rpm: "20"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "2"
+spec:
+  ingressClassName: amlens-nginx
+  tls: [{ hosts: [__HOST__], secretName: amlens-tls }]
+  rules:
+    - host: __HOST__
+      http:
+        paths:
+          - path: /oauth2
+            pathType: Prefix
+            backend: { service: { name: oauth2-proxy, port: { number: 4180 } } }
+---
+# Status only (no data) without sign-in, for the pipeline's smoke test and uptime checks.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: { name: amlens-health, namespace: amlens }
+spec:
+  ingressClassName: amlens-nginx
+  tls: [{ hosts: [__HOST__], secretName: amlens-tls }]
+  rules:
+    - host: __HOST__
+      http:
+        paths:
+          - path: /api/backend/health
+            pathType: Exact
+            backend: { service: { name: frontend, port: { number: 3000 } } }
